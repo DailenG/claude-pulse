@@ -1,0 +1,34 @@
+{
+  "name": "claude-pulse",
+  "version": "0.1.0",
+  "description": "A local, zero-dependency dashboard for Claude Code: live token usage, context fill, limits and Allow notifications.",
+  "bin": {
+    "claude-pulse": "bin/cli.js"
+  },
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node bin/cli.js"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "dashboard",
+    "monitor",
+    "tokens",
+    "usage",
+    "cli"
+  ],
+  "author": "Nikita Vdoudikoff",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "bin",
+    "src",
+    "public",
+    "hooks",
+    "README.md",
+    "LICENSE"
+  ]
+}

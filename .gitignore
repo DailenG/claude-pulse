@@ -1,0 +1,6 @@
+node_modules/
+*.log
+.DS_Store
+.env
+# local user config and runtime data live in the home dir, never in the repo
+.claude-pulse.json

@@ -1,40 +1,42 @@
 # Pulse for Claude Code
 
-A local, zero-dependency dashboard for [Claude Code](https://claude.com/claude-code). It reads the session logs Claude Code already writes to `~/.claude` and shows, live:
-
-- context fill of your active session
-- tokens spent this hour, today, this week and all time
-- estimated API-equivalent cost, broken down by model and project
-- every session, what it was about and when it last moved
-- a feed of what Claude actually did (edits, commands, searches)
-- usage against your plan budgets
-- a notification when Claude is waiting for you to approve an `Allow` prompt
-
-No account, no telemetry, no network calls. Everything stays on your machine.
+**A local dashboard for [Claude Code](https://claude.com/claude-code) that shows what Claude is doing, what it is spending, and lets you approve its tool calls from your phone.** Zero dependencies, nothing leaves your machine.
 
 ![Overview](docs/overview.png)
+
+Claude Code already writes every session to disk. Pulse reads those files (read only) and turns them into a live dashboard: token spend by hour, day and week, the context fill of your active session, an ambient view of Claude at work, full-text search across everything you have ever run, and a notification with `Allow` / `Allow all` / `Deny` buttons when Claude needs you, on your desktop or your phone. No account, no telemetry, no network calls.
+
+## Why you might want it
+
+- 📱 **Approve from your phone.** A push with working `Allow` / `Allow all` / `Deny` buttons. No Wi-Fi setup, no IP, no open port: it works from anywhere, even on cellular.
+- 💾 **Never lose a session.** One command recovers your last session as a readable transcript, and Pulse auto-snapshots active ones, so a crash or a frozen laptop never costs you context.
+- 📊 **See the spend.** Live tokens and API-equivalent cost by hour, day, week, model and project, against budgets you set, with a phone alert when you cross one.
+- 🦀 **Ambient office.** A full-screen view of a little mascot working, resting, or waiting on you, with a rough ETA. Quietly addictive on a second monitor.
+- 🔎 **Search everything.** Full-text search across every session on disk, one click to the transcript.
+- 🔒 **Local and private.** Reads `~/.claude` read only, serves on `127.0.0.1`, zero dependencies, no telemetry.
 
 | Ambient office view | Approve from the dashboard or your phone |
 | --- | --- |
 | ![Office](docs/office.png) | ![Approve](docs/approve.png) |
 
-## Run it
+## Quick start
 
 Requires Node 18+.
 
 ```bash
-git clone https://github.com/<you>/claude-pulse.git
+git clone https://github.com/nikitadoudikov/claude-pulse.git
 cd claude-pulse
 node bin/cli.js
 ```
 
-Or, once published to npm:
+That opens `http://127.0.0.1:4317`. To get desktop and phone notifications and to
+approve tool calls, wire the hooks (one command, safe to re-run):
 
 ```bash
-npx claude-pulse
+node bin/cli.js install-hooks   # adds the hooks to ~/.claude/settings.json
 ```
 
-It opens `http://127.0.0.1:4317`. Options:
+Then restart Claude Code, and you are set. Other options:
 
 ```
 claude-pulse --port 4317   # change the port

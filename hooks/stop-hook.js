@@ -54,11 +54,12 @@ function push(t, title, msg, tags) {
 }
 
 function shellQuote(s) { return '"' + String(s).replace(/["\\]/g, '\\$&') + '"'; }
-function desktopNotify(title, body) {
+function desktopNotify(title, body, sound) {
   try {
     if (process.platform === 'darwin') {
-      var script = 'display notification ' + shellQuote(body) + ' with title ' + shellQuote(title) + ' sound name "Glass"';
+      var script = 'display notification ' + shellQuote(body) + ' with title ' + shellQuote(title);
       spawn('osascript', ['-e', script], { stdio: 'ignore', detached: true }).unref();
+      if (sound) spawn('afplay', ['/System/Library/Sounds/' + sound + '.aiff'], { stdio: 'ignore', detached: true }).unref();
     } else if (process.platform === 'linux') {
       spawn('notify-send', [title, body], { stdio: 'ignore', detached: true }).unref();
     }
@@ -75,7 +76,7 @@ function desktopNotify(title, body) {
 
   const project = input.cwd ? path.basename(input.cwd) : '';
   // desktop banner always; phone push only if an ntfy topic is set
-  desktopNotify('Claude finished' + (project ? ' · ' + project : ''), 'Your turn');
+  desktopNotify('Claude finished' + (project ? ' · ' + project : ''), 'Your turn', 'Glass');
   const t = topic();
   if (t) await push(t, 'Claude finished' + (project ? ' (' + project + ')' : ''), 'Your turn' + (project ? ' in ' + project : ''), 'white_check_mark');
   process.exit(0);

@@ -105,11 +105,13 @@ function pushNtfy(input) {
 }
 
 function shellQuote(s) { return '"' + String(s).replace(/["\\]/g, '\\$&') + '"'; }
-function desktopNotify(title, body) {
+function desktopNotify(title, body, sound) {
   try {
     if (process.platform === 'darwin') {
-      var script = 'display notification ' + shellQuote(body) + ' with title ' + shellQuote(title) + ' sound name "Ping"';
+      var script = 'display notification ' + shellQuote(body) + ' with title ' + shellQuote(title);
       spawn('osascript', ['-e', script], { stdio: 'ignore', detached: true }).unref();
+      // play the sound directly so it is heard even if notification sounds are off
+      if (sound) spawn('afplay', ['/System/Library/Sounds/' + sound + '.aiff'], { stdio: 'ignore', detached: true }).unref();
     } else if (process.platform === 'linux') {
       spawn('notify-send', [title, body], { stdio: 'ignore', detached: true }).unref();
     }
@@ -147,7 +149,7 @@ function desktopNotify(title, body) {
       }));
     } catch (e) { return passthrough(); }
 
-    desktopNotify('Claude needs approval' + (project ? ' · ' + project : ''), tool + (summary ? ': ' + summary.slice(0, 120) : ''));
+    desktopNotify('Claude needs approval' + (project ? ' · ' + project : ''), tool + (summary ? ': ' + summary.slice(0, 120) : ''), 'Funk');
     pushNtfy({ _tool: tool, _summary: summary, _id: id, _project: project });
 
     var start = Date.now(), decision = null, deadline = timeoutMs();

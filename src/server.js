@@ -72,6 +72,9 @@ function getStats() {
 
   const events = notify.readEvents(20);
   data.waiting = notify.computeWaiting(events, data.sessions, now);
+  // a notification prompt is stale the moment Claude is clearly working again
+  // (e.g. right after you tap Allow all): drop it so the mascot sits back down.
+  if (data.waiting && data.eta && data.eta.working) data.waiting = null;
   data.notifications = events.slice(0, 10);
   data.pending = approvals.readPending();
   data.rules = approvals.readRules();

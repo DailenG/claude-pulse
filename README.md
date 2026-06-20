@@ -14,9 +14,9 @@ No account, no telemetry, no network calls. Everything stays on your machine.
 
 ![Overview](docs/overview.png)
 
-| Office (ambient) | Sessions + search | Phone view |
-| --- | --- | --- |
-| ![Office](docs/office.png) | ![Sessions](docs/sessions.png) | ![Phone](docs/phone.png) |
+| Ambient office view | Approve from the dashboard or your phone |
+| --- | --- |
+| ![Office](docs/office.png) | ![Approve](docs/approve.png) |
 
 ## Run it
 

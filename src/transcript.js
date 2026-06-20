@@ -103,8 +103,8 @@ function renderMarkdown(file, opts = {}) {
   const parts = [`# Session ${meta.sid}`, '', ...metaLines(meta),
     meta.title ? `- title: ${meta.title}` : '', '', '---'];
   for (const b of blocks) {
-    if (b.role === 'user') { parts.push(`\n### 🧑 You\n\n${b.text}`); continue; }
-    parts.push('\n### 🤖 Claude\n');
+    if (b.role === 'user') { parts.push(`\n### You\n\n${b.text}`); continue; }
+    parts.push('\n### Claude\n');
     if (b.text) parts.push(b.text);
     for (const t of b.tools) {
       parts.push(`- \`${t.name}\`${t.hint ? ' ' + t.hint : ''}`);

@@ -8,12 +8,12 @@ Claude Code already writes every session to disk. Pulse reads those files (read 
 
 ## Why you might want it
 
-- 📱 **Approve from your phone.** A push with working `Allow` / `Allow all` / `Deny` buttons. No Wi-Fi setup, no IP, no open port: it works from anywhere, even on cellular.
-- 💾 **Never lose a session.** One command recovers your last session as a readable transcript, and Pulse auto-snapshots active ones, so a crash or a frozen laptop never costs you context.
-- 📊 **See the spend.** Live tokens and API-equivalent cost by hour, day, week, model and project, against budgets you set, with a phone alert when you cross one.
-- 🦀 **Ambient office.** A full-screen view of a little mascot working, resting, or waiting on you, with a rough ETA. Quietly addictive on a second monitor.
-- 🔎 **Search everything.** Full-text search across every session on disk, one click to the transcript.
-- 🔒 **Local and private.** Reads `~/.claude` read only, serves on `127.0.0.1`, zero dependencies, no telemetry.
+- **Approve from your phone.** A push with working `Allow` / `Allow all` / `Deny` buttons. No Wi-Fi setup, no IP, no open port: it works from anywhere, even on cellular.
+- **Never lose a session.** One command recovers your last session as a readable transcript, and Pulse auto-snapshots active ones, so a crash or a frozen laptop never costs you context.
+- **See the spend.** Live tokens and API-equivalent cost by hour, day, week, model and project, against budgets you set, with a phone alert when you cross one.
+- **Ambient office.** A full-screen view of a little mascot working, resting, or waiting on you, with a rough ETA. Quietly addictive on a second monitor.
+- **Search everything.** Full-text search across every session on disk, one click to the transcript.
+- **Local and private.** Reads `~/.claude` read only, serves on `127.0.0.1`, zero dependencies, no telemetry.
 
 | Ambient office view | Approve from the dashboard or your phone |
 | --- | --- |
@@ -110,11 +110,25 @@ resume. Both need the `PreToolUse` hook wired.
 
 ## How it works
 
+```
+  ┌──────────────┐   writes .jsonl    ┌──────────────────────┐   SSE    ┌──────────────┐
+  │  Claude Code │ ─────────────────▶ │  Pulse  (read only)  │ ───────▶ │  dashboard   │
+  │  (terminal)  │                    │   127.0.0.1:4317     │          │  + phone     │
+  └──────┬───────┘                    └──────────────────────┘          └──────────────┘
+         │
+         │  hooks:  Notification  ·  Stop  ·  PreToolUse
+         ▼
+  ┌─────────────────────────────┐
+  │  ~/.claude-pulse/           │   pending approvals · decisions · events
+  └─────────────────────────────┘
+```
+
 Claude Code logs every session as JSONL under `~/.claude/projects/`. Each assistant
 message carries a `usage` block (input, output and cache tokens) with a timestamp.
 Pulse reads those files (read only), caches each file by modification time so
 unchanged sessions are never re-parsed, and aggregates the numbers. The browser
-gets live updates over Server-Sent Events.
+gets live updates over Server-Sent Events. Three small hooks let Claude Code tell
+Pulse when it needs you, when a turn ends, and when it wants to run a tool.
 
 ## Notifications when Claude needs you
 
@@ -185,6 +199,23 @@ Pulse listens on. No same Wi-Fi, no IP, no open port: it works from anywhere,
 even on cellular. Pulse only acts on a reply while it is actually waiting for
 that request, so a stale notification can do nothing.
 
+```
+  Claude wants to run a tool
+          │
+          ▼
+   PreToolUse hook ──▶ Pulse ──push──▶ phone notification
+          │                                   │
+          │                              tap "Allow"
+          │                                   │
+          │                    answer returns over ntfy
+          │                                   │
+          ▼                                   ▼
+   hook is still waiting ◀── decision ◀── Pulse (subscribed to the reply topic)
+          │
+          ▼
+   hook returns "allow" ──▶ Claude runs the tool
+```
+
 ## Phone push (optional)
 
 To get a push on your phone when Claude needs you or finishes, pick a hard to
@@ -226,11 +257,28 @@ observe. The `pro`, `max5` and `max20` presets are starting points, not official
 numbers. Token cost is estimated from public API list prices purely as a usage
 proxy; subscription users do not pay per token.
 
-## Privacy
+## Security and privacy
 
-Pulse never sends anything anywhere. It reads local files under `~/.claude`,
-serves a dashboard on `127.0.0.1` only, and keeps its own small runtime state in
-`~/.claude-pulse/`. There is no analytics and no external dependency.
+Pulse is local-first and opt-in. Out of the box it binds to `127.0.0.1` only,
+makes no outbound calls, has zero dependencies (no supply chain), and reads
+`~/.claude` read only. Nothing leaves your machine and there is no analytics. Two
+optional features change that, and both are off until you turn them on:
+
+- **Phone push (`ntfyTopic`)** routes through the public
+  [ntfy.sh](https://ntfy.sh) relay. Approval prompts (with a short command
+  summary) and your taps pass through a topic you name, so anyone who learns the
+  topic can read those prompts and answer them. Use a long random topic, and
+  self-host ntfy or use ntfy access tokens if you want stronger guarantees. Pulse
+  only acts on a reply while it is genuinely waiting for that exact request, so a
+  stale or guessed message cannot approve anything by itself.
+- **LAN access (`bindLan`)** binds the server to your whole network so a phone on
+  the same Wi-Fi can open the live `/phone` page. While it is on, other devices
+  on that network can also read the dashboard and your transcripts, so only
+  enable it on a network you trust. You do not need it for phone approvals (those
+  go through ntfy), so most people should leave it off.
+
+Runtime state, the device token and your config live in your home directory under
+`~/.claude-pulse/`, and are never committed or sent anywhere.
 
 ## License
 

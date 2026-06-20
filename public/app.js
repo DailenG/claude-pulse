@@ -874,7 +874,7 @@ function renderSession() {
         '<span class="chip">' + esc(m.model || '') + '</span>' +
         '<span class="chip">' + d.turns.length + ' requests</span>' +
         (lastTurn ? '<span class="chip">context ' + numSpan(lastTurn.context) + '</span>' : '') +
-        '<a class="chip chip--accent" style="text-decoration:none" target="_blank" rel="noopener" href="/transcript?sid=' + encodeURIComponent(state.sessionSid || '') + '">open transcript ↗</a>' +
+        '<a class="chip chip--accent" style="text-decoration:none" target="_blank" rel="noopener" href="/transcript?sid=' + encodeURIComponent(state.sessionSid || '') + '">open transcript</a>' +
         '<a class="chip chip--accent" style="text-decoration:none" href="/api/export?sid=' + encodeURIComponent(state.sessionSid || '') + '&dl=1">download .md</a>' +
         '<button class="chip chip--accent resume-btn" style="border:0;cursor:pointer">copy resume cmd</button>' +
       '</div>' +

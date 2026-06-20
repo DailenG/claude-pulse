@@ -1,9 +1,10 @@
 {
-  "name": "claude-pulse",
+  "name": "pulse-for-claude-code",
   "version": "0.1.0",
-  "description": "A local, zero-dependency dashboard for Claude Code: live token usage, context fill, limits and Allow notifications.",
+  "description": "A local, zero-dependency dashboard for Claude Code: live token usage, context fill, lost-session recovery, and approving tool calls from your phone.",
   "bin": {
     "claude-pulse": "bin/cli.js",
+    "pulse-for-claude-code": "bin/cli.js",
     "claude-pulse-export": "bin/export.js"
   },
   "main": "src/server.js",

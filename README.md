@@ -21,7 +21,13 @@ Claude Code already writes every session to disk. Pulse reads those files (read 
 
 ## Quick start
 
-Requires Node 18+.
+Requires Node 18+. Run it with no install:
+
+```bash
+npx pulse-for-claude-code
+```
+
+Or clone it:
 
 ```bash
 git clone https://github.com/nikitadoudikov/claude-pulse.git
@@ -29,11 +35,12 @@ cd claude-pulse
 node bin/cli.js
 ```
 
-That opens `http://127.0.0.1:4317`. To get desktop and phone notifications and to
-approve tool calls, wire the hooks (one command, safe to re-run):
+Either way it opens `http://127.0.0.1:4317`. To get desktop and phone
+notifications and to approve tool calls, wire the hooks (one command, safe to
+re-run):
 
 ```bash
-node bin/cli.js install-hooks   # adds the hooks to ~/.claude/settings.json
+claude-pulse install-hooks   # adds the hooks to ~/.claude/settings.json
 ```
 
 Then restart Claude Code, and you are set. Other options:

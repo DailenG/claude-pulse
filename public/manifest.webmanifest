@@ -1,0 +1,11 @@
+{
+  "name": "Pulse for Claude Code",
+  "short_name": "Pulse",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1f1e1b",
+  "theme_color": "#d97757",
+  "icons": [
+    { "src": "favicon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "any" }
+  ]
+}

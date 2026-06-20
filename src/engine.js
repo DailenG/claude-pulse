@@ -398,12 +398,28 @@ function scan(config, nowMs) {
     weekMs: blockReset(7 * 86400 * 1000),
   };
 
+  // peak spend per window type = best honest proxy for the real ceiling, since
+  // Anthropic does not publish limits. Percent is shown against this.
+  const blockB = {}, weekB = {}, dayB = {};
+  for (const e of allTokens) {
+    const c = entryCost(e, pricing);
+    const bk = Math.floor(e.t / (5 * 3600 * 1000));
+    const wk = Math.floor(e.t / (7 * 86400 * 1000));
+    const dk = dateKey(e.t);
+    blockB[bk] = (blockB[bk] || 0) + c;
+    weekB[wk] = (weekB[wk] || 0) + c;
+    dayB[dk] = (dayB[dk] || 0) + c;
+  }
+  const maxOf = (o) => { let m = 0; for (const k in o) if (o[k] > m) m = o[k]; return m; };
+  const peaks = { fiveHour: maxOf(blockB), day: maxOf(dayB), week: maxOf(weekB) };
+
   return {
     generatedAt: now,
     plan: config.plan,
     rank: rankFor(windows.total.tokens),
     eta,
     resets,
+    peaks,
     budgets: config.budgets,
     context,
     active: active ? sessionsOut.find(s => s.sid === active.sid) || null : null,

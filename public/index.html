@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Pulse for Claude Code</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#1f1e1b" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  <meta name="apple-mobile-web-app-title" content="Pulse" />
+  <link rel="apple-touch-icon" href="favicon.svg" />
   <link rel="stylesheet" href="style.css" />
   <script>
     // set theme before paint to avoid a flash
@@ -47,6 +53,8 @@
       <span class="seg vibe-seg" id="vibe-seg">
         <button data-vibe="office">Office</button>
         <button data-vibe="garage">Garage</button>
+        <button data-vibe="courchevel">Chalet</button>
+        <button data-vibe="paris">Paris</button>
       </span>
       <span class="rank" id="rank-badge" title="your vibe, by all-time tokens"></span>
       <select class="plan-select" id="plan-select" title="your plan">
@@ -56,8 +64,10 @@
         <option value="max20">Max 20x</option>
         <option value="custom">Custom</option>
       </select>
+      <button class="appr-toggle" id="appr-toggle" title="remote approvals: gate Claude's tools until you allow from here or your phone">approvals off</button>
       <button class="icon-btn" id="metric-toggle" title="chart metric: cost or tokens">$</button>
       <span class="live" id="live-dot" title="live"><span class="live__dot"></span>live</span>
+      <button class="icon-btn" id="fs-toggle" title="fullscreen" aria-label="fullscreen">⤢</button>
       <button class="icon-btn" id="theme-toggle" title="toggle theme" aria-label="toggle theme">◑</button>
     </div>
   </header>
@@ -67,6 +77,8 @@
     <span class="waiting__text" id="waiting-text">Claude is waiting for you</span>
     <span class="waiting__meta" id="waiting-meta"></span>
   </div>
+
+  <div class="approvals" id="approvals" hidden></div>
 
   <main class="main">
     <!-- Overview -->
@@ -97,8 +109,14 @@
     <!-- Sessions -->
     <section class="panel" id="panel-sessions">
       <div class="card">
-        <div class="card__head"><span class="card__title">Sessions</span><span class="card__hint" id="sessions-count"></span></div>
+        <div class="card__head"><span class="card__title">Sessions</span><span class="card__hint" id="sessions-count"></span>
+          <a class="card__action" href="/api/export-all" title="download every session as one gzipped file">download all history</a></div>
+        <div class="search-row">
+          <input class="search" id="sessions-search" type="search" placeholder="search every session for lost info…" autocomplete="off" />
+          <select class="search-project" id="search-project" hidden></select>
+        </div>
         <div class="table" id="sessions-table"></div>
+        <div id="search-results" hidden></div>
       </div>
     </section>
 
@@ -170,6 +188,8 @@
     <span id="foot-status">connecting...</span>
     <span class="foot__sep">·</span>
     <span>all data stays on your machine</span>
+    <span class="foot__sep">·</span>
+    <a href="/phone" target="_blank" rel="noopener">phone view</a>
   </footer>
 
   <div class="done-ov" id="done-overlay" hidden>

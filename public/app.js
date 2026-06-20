@@ -193,21 +193,20 @@ function renderLimitBars(container, s) {
     { name: 'Today', w: s.windows.today, budget: b.day, fk: 'today' },
     { name: 'This week', w: s.windows.week, budget: b.week, fk: 'week' },
   ];
-  var maxCost = Math.max.apply(null, rows.map(function (r) { return r.w.cost; }).concat([0.01]));
+  var peaks = s.peaks || {};
   container.innerHTML = rows.map(function (r) {
     var used = r.w.cost;
+    var peakKey = r.fk === 'today' ? 'day' : r.fk;
+    var denom = r.budget != null ? r.budget : peaks[peakKey];
+    var pct = denom ? Math.round(used / denom * 100) : 0;
     var rt = resetText(s, r.fk);
     var reset = rt ? '<div class="limitrow__reset">' + rt + '</div>' : '';
     var attrs = ' data-focus="1" data-flabel="' + r.name + '" data-fcost="' + used + '" data-ftok="' + r.w.tokens + '"';
-    if (r.budget == null) {
-      var rel = (used / maxCost) * 100;
-      return '<div class="limitrow"' + attrs + '><div class="limitrow__top"><span class="limitrow__name">' + r.name + '</span>' +
-        '<span class="limitrow__val"><b>' + fmtCost(used) + '</b> · ' + numSpan(r.w.tokens) + ' tok</span></div>' +
-        barHtml(rel, 'is-ok') + reset + '</div>';
-    }
-    var pct = (used / r.budget) * 100;
+    var right = r.budget != null
+      ? '<b>' + pct + '%</b> · ' + fmtCost(used) + ' / ' + fmtCost(r.budget)
+      : '<b>' + pct + '%</b> · ' + fmtCost(used);
     return '<div class="limitrow"' + attrs + '><div class="limitrow__top"><span class="limitrow__name">' + r.name + '</span>' +
-      '<span class="limitrow__val"><b>' + fmtCost(used) + '</b> / ' + fmtCost(r.budget) + ' · ' + Math.round(pct) + '%</span></div>' +
+      '<span class="limitrow__val">' + right + '</span></div>' +
       barHtml(Math.min(100, pct), barClass(pct)) + reset + '</div>';
   }).join('');
 }
@@ -224,8 +223,42 @@ function renderLimits() {
     '<span class="limitrow__val"><b>' + fmtTokens(ctx.used) + '</b> / ' + fmtTokens(ctx.limit) + ' · ' + ctx.percent + '%</span></div>' +
     barHtml(ctx.percent, barClass(ctx.percent)) + '</div>');
   document.getElementById('limits-note').textContent =
-    'Anthropic does not expose your real subscription limits, so there is no true ceiling to show here. Bars show actual usage. Set your own target in ~/.claude-pulse.json ("budgets": {"fiveHour": 50, "day": 150, "week": 400}) and it will switch to percent. Cost is an API-equivalent estimate, not what you pay on a subscription.';
+    'Percent is measured against your own busiest window so far, the closest honest proxy since Anthropic does not publish real limits. Click any row to see the exact tokens and dollars. Set fixed targets in ~/.claude-pulse.json ("budgets": {"fiveHour": 50, "day": 150, "week": 400}) to use those instead. Cost is an API-equivalent estimate, not what you pay on a subscription.';
 }
+
+// ---------- approvals: Allow / Allow all / Deny from the dashboard ----------
+function renderApprovals(s) {
+  var box = document.getElementById('approvals');
+  if (!box) return;
+  var pend = s.pending || [];
+  // audible + visible signal whenever a new approval shows up, on any screen
+  if (pend.length > (state.lastPendingCount || 0)) playAttention();
+  state.lastPendingCount = pend.length;
+  if (!pend.length) { box.hidden = true; box.innerHTML = ''; return; }
+  box.hidden = false;
+  box.innerHTML = pend.map(function (p) {
+    return '<div class="appr">' +
+      '<div class="appr__info">' +
+        '<span class="appr__tool">' + esc(p.tool) + '</span> wants to run' +
+        (p.project ? ' <span class="appr__proj">' + esc(p.project) + '</span>' : '') +
+        (p.summary ? '<div class="appr__sum">' + esc(p.summary) + '</div>' : '') +
+      '</div>' +
+      '<div class="appr__btns">' +
+        '<button class="abtn abtn--allow" data-id="' + esc(p.id) + '" data-dec="allow" data-scope="once">Allow</button>' +
+        '<button class="abtn abtn--all" data-id="' + esc(p.id) + '" data-dec="allow" data-scope="all">Allow all</button>' +
+        '<button class="abtn abtn--deny" data-id="' + esc(p.id) + '" data-dec="deny" data-scope="once">Deny</button>' +
+      '</div></div>';
+  }).join('');
+}
+
+document.addEventListener('click', function (e) {
+  var b = e.target.closest('.abtn');
+  if (!b) return;
+  fetch('/api/decision', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: b.getAttribute('data-id'), decision: b.getAttribute('data-dec'), scope: b.getAttribute('data-scope') }),
+  }).then(function () { return fetch('/api/stats'); }).then(function (r) { return r.json(); }).then(applyStats).catch(function () {});
+});
 
 // ---------- result readiness ring (top right, on every screen) ----------
 var READY_CIRC = 2 * Math.PI * 15;
@@ -287,6 +320,22 @@ function phraseFor(s) {
   return pool[Math.floor(Date.now() / 10000) % pool.length];
 }
 
+// turn the latest tool call into a readable "what Claude is doing" label
+var VERB = {
+  Edit: 'editing', MultiEdit: 'editing', Write: 'writing', NotebookEdit: 'editing',
+  Read: 'reading', Bash: 'running', Grep: 'searching', Glob: 'searching', LS: 'listing',
+  Task: 'delegating', WebFetch: 'fetching', WebSearch: 'searching', TodoWrite: 'planning',
+};
+function cap1(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+function actionLabel(a) {
+  if (!a || !a.name) return '';
+  var verb = VERB[a.name] || a.name.toLowerCase();
+  var hint = a.hint || '';
+  if (hint.indexOf('/') !== -1 && a.name !== 'Bash') hint = hint.split('/').pop();
+  hint = hint.replace(/\s+/g, ' ').trim().slice(0, 30);
+  return cap1(hint ? (verb + ' ' + hint) : verb);
+}
+
 function summarizeActions(actions) {
   if (!actions || !actions.length) return '';
   var counts = {};
@@ -317,8 +366,11 @@ function showDoneOverlay(sid) {
   }).catch(function () {});
 }
 
-var VIBE_LABEL = { office: 'Office', garage: 'Garage' };
-var STEAM_POS = { office: { left: '60%', top: '63%' }, garage: { left: '57%', top: '66%' } };
+var VIBE_LABEL = { office: 'Office', garage: 'Garage', courchevel: 'Courchevel', paris: 'Paris' };
+var STEAM_POS = {
+  office: { left: '60%', top: '63%' }, garage: { left: '57%', top: '66%' },
+  courchevel: { left: '58%', top: '70%' }, paris: { left: '60%', top: '72%' },
+};
 
 function buildLights() {
   if (state.lightsBuilt) return;
@@ -357,7 +409,7 @@ function renderOffice() {
   buildLights();
   setVibeButtons();
 
-  var waiting = !!s.waiting;
+  var waiting = !!s.waiting || (s.pending && s.pending.length > 0);
   var eta = s.eta;
   var phase = eta ? eta.phase : 'idle';        // working | done | idle
   var ns = waiting ? 'waiting' : phase;
@@ -389,13 +441,29 @@ function renderOffice() {
   else if (ns === 'error') { bubble.hidden = false; bubble.textContent = '✕'; bubble.classList.add('is-error'); }
   else { bubble.hidden = true; }
 
-  document.getElementById('office-state').textContent = phraseFor(ns);
+  var stateLabel;
+  if (ns === 'working') {
+    var a0 = (s.activity && s.activity[0]) ? s.activity[0] : null;
+    stateLabel = a0 ? actionLabel(a0) : cap1(phraseFor('working'));
+  } else {
+    stateLabel = cap1(phraseFor(ns));
+  }
+  document.getElementById('office-state').textContent = stateLabel;
 
   var etaEl = document.getElementById('office-eta');
   var subEl = document.getElementById('office-sub');
   if (ns === 'waiting') {
-    etaEl.textContent = s.waiting.message || 'waiting for your approval';
-    subEl.textContent = (s.waiting.project ? s.waiting.project + ' · ' : '') + 'respond in your terminal';
+    if (s.pending && s.pending.length) {
+      var p0 = s.pending[0];
+      etaEl.textContent = p0.tool + ' needs approval';
+      subEl.textContent = (p0.summary ? p0.summary.slice(0, 80) + ' · ' : '') + 'use the buttons above';
+    } else if (s.waiting) {
+      etaEl.textContent = s.waiting.message || 'waiting for your approval';
+      subEl.textContent = (s.waiting.project ? s.waiting.project + ' · ' : '') + 'respond in your terminal';
+    } else {
+      etaEl.textContent = 'waiting for you';
+      subEl.textContent = '';
+    }
   } else if (ns === 'working' && eta) {
     if (eta.remainingMs != null && eta.medianMs) etaEl.textContent = 'ready in about ' + dur(eta.remainingMs);
     else etaEl.textContent = 'working for ' + dur(eta.elapsedMs);
@@ -415,12 +483,10 @@ function renderOffice() {
   // most important numbers, surfaced right on this screen
   var info = document.getElementById('office-info');
   if (info) {
-    if (s.active) {
-      info.innerHTML = 'context ' + s.active.contextPercent + '% · today ' + numSpan(s.windows.today.tokens) +
-        ' tok · ' + fmtCost(s.windows.today.cost);
-    } else {
-      info.textContent = 'today ' + fmtTokens(s.windows.today.tokens) + ' tok · ' + fmtCost(s.windows.today.cost);
-    }
+    var base = s.active
+      ? 'context ' + s.active.contextPercent + '% · today ' + numSpan(s.windows.today.tokens) + ' tok · ' + fmtCost(s.windows.today.cost)
+      : 'today ' + fmtTokens(s.windows.today.tokens) + ' tok · ' + fmtCost(s.windows.today.cost);
+    info.innerHTML = base;
   }
 }
 
@@ -595,6 +661,14 @@ function render() {
   if (rb) rb.textContent = s.rank || '';
 
   updateReady(s);
+  renderApprovals(s);
+
+  var at = document.getElementById('appr-toggle');
+  if (at) {
+    var on = !!(s.rules && s.rules.enabled);
+    at.textContent = on ? 'approvals on' : 'approvals off';
+    at.classList.toggle('is-on', on);
+  }
 
   var sel = document.getElementById('plan-select');
   if (sel) {
@@ -654,6 +728,91 @@ if (brandEl) {
   });
 }
 
+// ---------- search across all sessions ----------
+var searchTimer;
+var searchEl = document.getElementById('sessions-search');
+var projEl = document.getElementById('search-project');
+if (searchEl) {
+  searchEl.addEventListener('input', function () {
+    clearTimeout(searchTimer);
+    var q = searchEl.value.trim();
+    searchTimer = setTimeout(function () { runSearch(q); }, 250);
+  });
+}
+if (projEl) projEl.addEventListener('change', function () { renderSearch(); });
+
+function hl(text, q) {
+  var et = esc(text);
+  if (!q) return et;
+  try {
+    var re = new RegExp('(' + esc(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'ig');
+    return et.replace(re, '<mark>$1</mark>');
+  } catch (e) { return et; }
+}
+function renderSearch() {
+  var box = document.getElementById('search-results');
+  if (!box) return;
+  var q = state.searchQuery || '';
+  var sel = projEl ? projEl.value : '';
+  var list = (state.searchResults || []).filter(function (x) { return !sel || x.project === sel; });
+  var rows = list.map(function (x) {
+    var snips = (x.snippets || []).map(function (sn) {
+      return '<div class="sr__snip"><span class="sr__who">' + esc(sn.role === 'user' ? 'you' : 'claude') + '</span> ' + hl(sn.text, q) + '</div>';
+    }).join('');
+    return '<div class="sr trow--link" data-sid="' + esc(x.sid) + '">' +
+      '<div class="sr__top"><span class="sr__title">' + hl(x.title || x.sid, q) + ' <small>' + esc(x.project) + (x.lastT ? ' · ' + relTime(x.lastT) : '') + '</small></span>' +
+      '<span class="sr__count">' + x.count + '×</span></div>' + snips + '</div>';
+  }).join('');
+  box.innerHTML = rows || '<div class="empty">nothing found for "' + esc(q) + '"</div>';
+}
+function runSearch(q) {
+  var table = document.getElementById('sessions-table');
+  var box = document.getElementById('search-results');
+  if (!box) return;
+  if (!q || q.length < 2) {
+    box.hidden = true; box.innerHTML = ''; if (table) table.hidden = false;
+    if (projEl) { projEl.hidden = true; }
+    state.searchResults = null;
+    return;
+  }
+  if (table) table.hidden = true;
+  box.hidden = false;
+  box.innerHTML = '<div class="empty">searching…</div>';
+  fetch('/api/search?q=' + encodeURIComponent(q)).then(function (r) { return r.json(); }).then(function (d) {
+    state.searchResults = d.results || [];
+    state.searchQuery = q;
+    // populate the project filter from the results
+    if (projEl) {
+      var projects = [];
+      state.searchResults.forEach(function (x) { if (x.project && projects.indexOf(x.project) === -1) projects.push(x.project); });
+      if (projects.length > 1) {
+        projEl.hidden = false;
+        projEl.innerHTML = '<option value="">all projects</option>' + projects.map(function (p) { return '<option value="' + esc(p) + '">' + esc(p) + '</option>'; }).join('');
+      } else { projEl.hidden = true; }
+    }
+    renderSearch();
+  }).catch(function () { box.innerHTML = '<div class="empty">search failed</div>'; });
+}
+
+// ---------- remote approvals toggle ----------
+document.getElementById('appr-toggle').addEventListener('click', function () {
+  var on = state.stats && state.stats.rules && state.stats.rules.enabled;
+  fetch('/api/rules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: !on }) })
+    .then(function () { return fetch('/api/stats'); }).then(function (r) { return r.json(); }).then(applyStats).catch(function () {});
+});
+
+// ---------- fullscreen ----------
+document.getElementById('fs-toggle').addEventListener('click', function () {
+  try {
+    if (!document.fullscreenElement) {
+      var el = document.documentElement;
+      (el.requestFullscreen || el.webkitRequestFullscreen || function () {}).call(el);
+    } else {
+      (document.exitFullscreen || document.webkitExitFullscreen || function () {}).call(document);
+    }
+  } catch (e) {}
+});
+
 // ---------- theme ----------
 document.getElementById('theme-toggle').addEventListener('click', function () {
   var cur = document.documentElement.getAttribute('data-theme');
@@ -698,7 +857,7 @@ function showPanel(id) {
 function openSession(sid) {
   fetch('/api/session?sid=' + encodeURIComponent(sid))
     .then(function (r) { return r.json(); })
-    .then(function (d) { state.session = d; state.tab = 'session'; showPanel('panel-session'); renderSession(); window.scrollTo(0, 0); })
+    .then(function (d) { state.session = d; state.sessionSid = sid; state.tab = 'session'; showPanel('panel-session'); renderSession(); window.scrollTo(0, 0); })
     .catch(function () {});
 }
 
@@ -715,6 +874,9 @@ function renderSession() {
         '<span class="chip">' + esc(m.model || '') + '</span>' +
         '<span class="chip">' + d.turns.length + ' requests</span>' +
         (lastTurn ? '<span class="chip">context ' + numSpan(lastTurn.context) + '</span>' : '') +
+        '<a class="chip chip--accent" style="text-decoration:none" target="_blank" rel="noopener" href="/transcript?sid=' + encodeURIComponent(state.sessionSid || '') + '">open transcript ↗</a>' +
+        '<a class="chip chip--accent" style="text-decoration:none" href="/api/export?sid=' + encodeURIComponent(state.sessionSid || '') + '&dl=1">download .md</a>' +
+        '<button class="chip chip--accent resume-btn" style="border:0;cursor:pointer">copy resume cmd</button>' +
       '</div>' +
       '<div class="card__head" style="margin-top:18px"><span class="card__title">Usage growth per request</span>' +
         '<span class="card__hint">cumulative ' + state.chartMetric + '</span></div>' +
@@ -761,8 +923,20 @@ function drawGrowth(canvas, turns) {
   ctx.strokeStyle = accent; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
 }
 
+// copy the resume command for the open session
+document.addEventListener('click', function (e) {
+  var rb = e.target.closest('.resume-btn');
+  if (!rb) return;
+  e.stopPropagation();
+  var cmd = 'claude --resume ' + (state.sessionSid || '');
+  try { if (navigator.clipboard) navigator.clipboard.writeText(cmd); } catch (err) {}
+  rb.textContent = 'copied!';
+  setTimeout(function () { rb.textContent = 'copy resume cmd'; }, 1500);
+});
+
 // open a session from any linked row (but not when toggling a number)
 document.addEventListener('click', function (e) {
+  if (e.target.closest('.resume-btn')) return;
   if (e.target.closest('.num')) return;
   var row = e.target.closest('[data-sid]');
   if (row) openSession(row.getAttribute('data-sid'));

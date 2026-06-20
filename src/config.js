@@ -46,6 +46,10 @@ function loadConfig() {
     pricing: PRICING,
     budgets: null,        // filled from the plan preset unless set explicitly
     ntfyTopic: '',        // ntfy.sh topic for phone push; empty = off
+    bindLan: false,       // listen on the LAN so a phone on Wi-Fi can approve
+    lanUrl: '',           // e.g. http://192.168.1.20:4317 ; enables phone Allow buttons
+    approvalTimeoutMs: 60000, // how long the Allow hook waits for you before the normal prompt
+    snapshotMinutes: 15,  // auto-save a light export of active sessions this often (0 = off)
   };
 
   let user = {};

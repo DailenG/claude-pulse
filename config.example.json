@@ -4,6 +4,9 @@
   "contextLimit": 200000,
   "idleMinutes": 10,
   "ntfyTopic": "",
+  "approvalTimeoutMs": 60000,
+  "snapshotMinutes": 15,
+  "bindLan": false,
   "budgets": {
     "fiveHour": 140,
     "day": 360,

@@ -140,6 +140,13 @@ function pushNtfy(input) {
     while (Date.now() - start < deadline) {
       decision = readJson(path.join(DECISIONS, id + '.json'), null);
       if (decision) break;
+      // honor a standing rule set WHILE we wait: tapping "Allow all" (or a per
+      // tool rule) on ONE card must release every other waiting request too, not
+      // only the one you clicked. without this, parallel tool calls hang here
+      // until they time out, which looked like "Allow all sometimes does nothing".
+      var live = readJson(RULES, { allowAll: false, allowTools: [], denyTools: [] });
+      if (live.denyTools && live.denyTools.indexOf(tool) !== -1) { decision = { decision: 'deny' }; break; }
+      if (live.allowAll || (live.allowTools && live.allowTools.indexOf(tool) !== -1)) { decision = { decision: 'allow' }; break; }
       await sleep(POLL_MS);
     }
     try { fs.unlinkSync(path.join(PENDING, id + '.json')); } catch (e) {}

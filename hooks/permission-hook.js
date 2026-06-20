@@ -20,6 +20,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const https = require('https');
+const { spawn } = require('child_process');
 
 const DIR = path.join(os.homedir(), '.claude-pulse');
 const PENDING = path.join(DIR, 'pending');
@@ -103,6 +104,18 @@ function pushNtfy(input) {
   });
 }
 
+function shellQuote(s) { return '"' + String(s).replace(/["\\]/g, '\\$&') + '"'; }
+function desktopNotify(title, body) {
+  try {
+    if (process.platform === 'darwin') {
+      var script = 'display notification ' + shellQuote(body) + ' with title ' + shellQuote(title) + ' sound name "Ping"';
+      spawn('osascript', ['-e', script], { stdio: 'ignore', detached: true }).unref();
+    } else if (process.platform === 'linux') {
+      spawn('notify-send', [title, body], { stdio: 'ignore', detached: true }).unref();
+    }
+  } catch (e) {}
+}
+
 (async function () {
   try {
     var raw = await readStdin();
@@ -134,6 +147,7 @@ function pushNtfy(input) {
       }));
     } catch (e) { return passthrough(); }
 
+    desktopNotify('Claude needs approval' + (project ? ' · ' + project : ''), tool + (summary ? ': ' + summary.slice(0, 120) : ''));
     pushNtfy({ _tool: tool, _summary: summary, _id: id, _project: project });
 
     var start = Date.now(), decision = null, deadline = timeoutMs();

@@ -30,7 +30,10 @@ function installHooks() {
     s.hooks[ev] = s.hooks[ev] || [];
     const has = s.hooks[ev].some((g) => (g.hooks || []).some((h) => (h.command || '').indexOf(EVENTS[ev]) !== -1));
     if (has) { already++; continue; }
-    s.hooks[ev].push({ matcher: '', hooks: [{ type: 'command', command: 'node ' + path.join(HOOKS_DIR, EVENTS[ev]) }] });
+    const hookObj = { type: 'command', command: 'node ' + path.join(HOOKS_DIR, EVENTS[ev]) };
+    // give the approval hook room to wait for your click before Claude Code kills it
+    if (ev === 'PreToolUse') hookObj.timeout = 120;
+    s.hooks[ev].push({ matcher: '', hooks: [hookObj] });
     added++;
   }
   save(s);

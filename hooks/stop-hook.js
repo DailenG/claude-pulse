@@ -13,6 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const https = require('https');
+const { spawn } = require('child_process');
 
 const RUNTIME = path.join(os.homedir(), '.claude-pulse');
 const LAST = path.join(RUNTIME, 'last-stop-push');
@@ -52,16 +53,30 @@ function push(t, title, msg, tags) {
   });
 }
 
+function shellQuote(s) { return '"' + String(s).replace(/["\\]/g, '\\$&') + '"'; }
+function desktopNotify(title, body) {
+  try {
+    if (process.platform === 'darwin') {
+      var script = 'display notification ' + shellQuote(body) + ' with title ' + shellQuote(title) + ' sound name "Glass"';
+      spawn('osascript', ['-e', script], { stdio: 'ignore', detached: true }).unref();
+    } else if (process.platform === 'linux') {
+      spawn('notify-send', [title, body], { stdio: 'ignore', detached: true }).unref();
+    }
+  } catch (e) {}
+}
+
 (async function () {
   const raw = await readStdin();
   let input = {}; try { input = JSON.parse(raw); } catch (e) {}
-  const t = topic();
-  if (!t) return process.exit(0);
 
+  // debounce so a rapid back-and-forth does not spam you
   try { const last = parseInt(fs.readFileSync(LAST, 'utf8'), 10) || 0; if (Date.now() - last < COOLDOWN) return process.exit(0); } catch (e) {}
   try { fs.mkdirSync(RUNTIME, { recursive: true }); fs.writeFileSync(LAST, String(Date.now())); } catch (e) {}
 
   const project = input.cwd ? path.basename(input.cwd) : '';
-  await push(t, 'Claude finished' + (project ? ' (' + project + ')' : ''), 'Your turn' + (project ? ' in ' + project : ''), 'white_check_mark');
+  // desktop banner always; phone push only if an ntfy topic is set
+  desktopNotify('Claude finished' + (project ? ' · ' + project : ''), 'Your turn');
+  const t = topic();
+  if (t) await push(t, 'Claude finished' + (project ? ' (' + project + ')' : ''), 'Your turn' + (project ? ' in ' + project : ''), 'white_check_mark');
   process.exit(0);
 })();

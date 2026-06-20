@@ -666,8 +666,13 @@ function render() {
   var at = document.getElementById('appr-toggle');
   if (at) {
     var on = !!(s.rules && s.rules.enabled);
-    at.textContent = on ? 'approvals on' : 'approvals off';
-    at.classList.toggle('is-on', on);
+    var allowAll = !!(s.rules && s.rules.allowAll);
+    at.textContent = !on ? 'approvals off' : (allowAll ? 'allow-all · not asking' : 'approvals on');
+    at.classList.toggle('is-on', on && !allowAll);
+    at.classList.toggle('is-allowall', on && allowAll);
+    at.title = (on && allowAll)
+      ? 'Allow-all is on: Claude runs tools without asking. Click to resume asking.'
+      : 'remote approvals: gate Claude\'s tools until you allow from here or your phone';
   }
 
   var sel = document.getElementById('plan-select');
@@ -796,8 +801,10 @@ function runSearch(q) {
 
 // ---------- remote approvals toggle ----------
 document.getElementById('appr-toggle').addEventListener('click', function () {
-  var on = state.stats && state.stats.rules && state.stats.rules.enabled;
-  fetch('/api/rules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: !on }) })
+  var r = (state.stats && state.stats.rules) || {};
+  // if allow-all is on, one click resumes asking; otherwise toggle approvals
+  var body = (r.enabled && r.allowAll) ? { allowAll: false, clearTools: true } : { enabled: !r.enabled };
+  fetch('/api/rules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     .then(function () { return fetch('/api/stats'); }).then(function (r) { return r.json(); }).then(applyStats).catch(function () {});
 });
 

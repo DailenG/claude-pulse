@@ -454,6 +454,7 @@ body.office-mode .abtn { padding: 12px 20px; font-size: 15px; }
 .office__state { font-family: var(--serif); font-size: 30px; letter-spacing: -0.01em; }
 .appr-toggle { border: 1px solid var(--hairline); background: var(--surface); color: var(--muted); font: inherit; font-size: 12px; padding: 6px 10px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
 .appr-toggle.is-on { color: #fff; background: var(--accent); border-color: var(--accent); }
+.appr-toggle.is-allowall { color: #1c1b19; background: #d9a154; border-color: #d9a154; }
 .office__eta { font-size: 16px; color: var(--accent); margin-top: 8px; min-height: 20px; }
 .office__sub { font-size: 13px; color: var(--muted); margin-top: 6px; }
 

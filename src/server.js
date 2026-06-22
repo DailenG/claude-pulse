@@ -78,6 +78,7 @@ function getStats() {
   data.notifications = events.slice(0, 10);
   data.pending = approvals.readPending();
   data.rules = approvals.readRules();
+  data.ntfyTopic = config.ntfyTopic || '';
 
   statsCache = { at: now, data };
   return data;
@@ -146,6 +147,31 @@ function createServer() {
     if (url === '/api/stats') return sendJson(res, getStats());
     if (url === '/api/events') return handleSse(req, res);
     if (url === '/api/health') return sendJson(res, { ok: true });
+    if (url === '/api/test-push') {
+      const cfg = loadConfig();
+      if (!cfg.ntfyTopic) return sendJson(res, { ok: false, error: 'no-topic' });
+      const rt = 'https://ntfy.sh/' + encodeURIComponent(cfg.ntfyTopic + '-reply');
+      ntfy.push(cfg.ntfyTopic, {
+        title: 'Pulse test',
+        message: 'If you can see this with Allow / Deny buttons, your phone is connected.',
+        tags: 'lock', priority: 'high',
+        actions: [
+          'http, Allow, ' + rt + ', method=POST, body=test|ok|x, clear=true',
+          'http, Deny, ' + rt + ', method=POST, body=test|no|x, clear=true',
+        ].join('; '),
+      });
+      return sendJson(res, { ok: true });
+    }
+    if (url === '/api/gen-topic' && req.method === 'POST') {
+      // alphabet with no l, 1, i, o, 0 so the topic is safe to type by hand
+      const alphabet = 'abcdefghjkmnpqrstvwxyz23456789';
+      let t = 'claude-pulse-';
+      for (let i = 0; i < 8; i++) t += alphabet[Math.floor(Math.random() * alphabet.length)];
+      saveConfig({ ntfyTopic: t });
+      try { ntfy.subscribeReplies(t); } catch (e) {}
+      statsCache.at = 0;
+      return sendJson(res, { ok: true, topic: t });
+    }
     if (url === '/api/session') {
       const q = new URLSearchParams(req.url.split('?')[1] || '');
       const sid = q.get('sid');

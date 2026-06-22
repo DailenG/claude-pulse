@@ -76,6 +76,7 @@ function renderOverview() {
   }).join('');
 
   renderActiveSessions(s);
+  renderPhoneCard(s);
 
   // active session
   var a = s.active;
@@ -732,6 +733,68 @@ if (brandEl) {
     render();
   });
 }
+
+// ---------- connect your phone ----------
+function renderPhoneCard(s) {
+  var el = document.getElementById('ov-phone');
+  if (!el) return;
+  var topic = (s && s.ntfyTopic) || '';
+  el.hidden = false;
+  var key = topic || 'none';
+  if (el.getAttribute('data-topic') === key) return; // already rendered, don't clobber status
+  el.setAttribute('data-topic', key);
+  if (!topic) {
+    el.innerHTML =
+      '<div class="card__head"><span class="card__title">Approve from your phone</span>' +
+        '<span class="card__hint">not set up</span></div>' +
+      '<p class="note" style="margin:6px 0 12px">Get a push with Allow / Deny when Claude needs you, even away from the keyboard. One tap to start:</p>' +
+      '<div class="phone-actions"><button class="phone-gen">Generate my topic</button>' +
+        '<span class="phone-msg" id="phone-msg"></span></div>';
+    return;
+  }
+  el.innerHTML =
+    '<div class="card__head"><span class="card__title">Approve from your phone</span>' +
+      '<span class="card__hint">set up once</span></div>' +
+    '<ol class="phone-steps">' +
+      '<li>Install the free <a href="https://ntfy.sh" target="_blank" rel="noopener">ntfy</a> app on your phone.</li>' +
+      '<li>In ntfy, subscribe to this topic: <code class="phone-topic">' + esc(topic) + '</code> ' +
+        '<button class="chip chip--accent phone-copy" data-topic="' + esc(topic) + '" style="border:0;cursor:pointer">copy</button></li>' +
+      '<li>Tap <b>Send test</b>, then on the push <b>expand it</b> (pull down / long-press) to see <b>Allow</b> / <b>Deny</b>.</li>' +
+    '</ol>' +
+    '<div class="phone-actions"><button class="phone-test">Send test notification</button>' +
+      '<span class="phone-msg" id="phone-msg"></span></div>';
+}
+
+document.addEventListener('click', function (e) {
+  var pg = e.target.closest('.phone-gen');
+  if (pg) {
+    var gmsg = document.getElementById('phone-msg');
+    pg.disabled = true; if (gmsg) gmsg.textContent = 'generating…';
+    fetch('/api/gen-topic', { method: 'POST' }).then(function (r) { return r.json(); }).then(function (d) {
+      if (d && d.topic) {
+        if (state.stats) state.stats.ntfyTopic = d.topic;
+        var pel = document.getElementById('ov-phone'); if (pel) pel.setAttribute('data-topic', '');
+        renderPhoneCard(state.stats);
+      } else { pg.disabled = false; if (gmsg) gmsg.textContent = 'failed'; }
+    }).catch(function () { pg.disabled = false; if (gmsg) gmsg.textContent = 'failed'; });
+    return;
+  }
+  var cp = e.target.closest('.phone-copy');
+  if (cp) {
+    try { if (navigator.clipboard) navigator.clipboard.writeText(cp.getAttribute('data-topic') || ''); } catch (err) {}
+    cp.textContent = 'copied!'; setTimeout(function () { cp.textContent = 'copy'; }, 1500);
+    return;
+  }
+  var pt = e.target.closest('.phone-test');
+  if (pt) {
+    var msg = document.getElementById('phone-msg');
+    pt.disabled = true; if (msg) msg.textContent = 'sending…';
+    fetch('/api/test-push', { method: 'POST' }).then(function (r) { return r.json(); }).then(function (d) {
+      pt.disabled = false;
+      if (msg) msg.textContent = (d && d.ok) ? 'sent, check your phone (expand the push for the buttons)' : 'set ntfyTopic in ~/.claude-pulse.json first';
+    }).catch(function () { pt.disabled = false; if (msg) msg.textContent = 'failed'; });
+  }
+});
 
 // ---------- search across all sessions ----------
 var searchTimer;

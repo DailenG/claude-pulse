@@ -45,10 +45,16 @@ function applyMessage(msg) {
   approvals.writeDecision(id, { decision: decision, scope: scope, time: Date.now() });
 }
 
+let currentTopic = null;
+let activeReq = null;
 let reconnectTimer = null;
+
 function scheduleReconnect(topic) {
   if (reconnectTimer) return;
-  reconnectTimer = setTimeout(() => { reconnectTimer = null; connect(topic); }, 5000);
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    if (topic === currentTopic) connect(topic); // skip if the topic was changed meanwhile
+  }, 5000);
   reconnectTimer.unref && reconnectTimer.unref();
 }
 
@@ -66,7 +72,7 @@ function connect(topic) {
         while ((nl = buf.indexOf('\n')) !== -1) {
           const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
           if (!line.trim()) continue;
-          try { const o = JSON.parse(line); if (o.event === 'message') applyMessage(o.message); } catch (e) {}
+          try { const o = JSON.parse(line); if (o.event === 'message' && topic === currentTopic) applyMessage(o.message); } catch (e) {}
         }
       });
       res.on('end', () => scheduleReconnect(topic));
@@ -74,9 +80,16 @@ function connect(topic) {
   } catch (e) { return scheduleReconnect(topic); }
   req.on('error', () => scheduleReconnect(topic));
   req.setTimeout(0);
+  activeReq = req;
 }
 
-// Subscribe so the phone's reply buttons take effect.
-function subscribeReplies(topic) { if (topic) connect(topic); }
+// Subscribe so the phone's reply buttons take effect. Safe to call again with a
+// new topic: it tears down the old subscription and listens on the new one live.
+function subscribeReplies(topic) {
+  if (!topic || topic === currentTopic) return;
+  currentTopic = topic;
+  if (activeReq) { try { activeReq.destroy(); } catch (e) {} activeReq = null; }
+  connect(topic);
+}
 
 module.exports = { push, replyTopic, applyMessage, subscribeReplies };

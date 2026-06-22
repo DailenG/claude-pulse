@@ -90,8 +90,15 @@ function serveStatic(req, res) {
   if (!fp.startsWith(PUBLIC_DIR)) { res.writeHead(403); res.end('forbidden'); return; }
   fs.readFile(fp, (err, buf) => {
     if (err) { res.writeHead(404); res.end('not found'); return; }
-    // never cache the dashboard assets, so a refresh always shows the latest UI
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(fp)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
+    // never cache the dashboard assets, so a refresh always shows the latest UI.
+    // CSP keeps an injected script from posting your session data off-machine
+    // (connect-src 'self'); inline script/style are allowed so the UI still works.
+    res.writeHead(200, {
+      'Content-Type': MIME[path.extname(fp)] || 'application/octet-stream',
+      'Cache-Control': 'no-store',
+      'Content-Security-Policy': "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'",
+      'X-Content-Type-Options': 'nosniff',
+    });
     res.end(buf);
   });
 }

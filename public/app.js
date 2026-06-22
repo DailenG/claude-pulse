@@ -218,13 +218,25 @@ function renderLimitBars(container, s) {
     var pct = denom ? Math.round(used / denom * 100) : 0;
     var rt = resetText(s, r.fk);
     var reset = rt ? '<div class="limitrow__reset">' + rt + '</div>' : '';
+    // burn rate + how long until the wall, on the limiting 5h window
+    var burn = '';
+    if (r.fk === 'fiveHour') {
+      var rate = (s.windows.hour && s.windows.hour.cost) || 0; // cost in the last hour ~ $/hour
+      if (rate > 0.01 && denom) {
+        var remaining = denom - used;
+        var label = r.budget != null ? 'your 5h budget' : 'your usual 5h peak';
+        burn = remaining > 0
+          ? '<div class="limitrow__burn">burning ~' + fmtCost(rate) + '/hr · ~' + dur(remaining / rate * 3600000) + ' to ' + label + '</div>'
+          : '<div class="limitrow__burn">burning ~' + fmtCost(rate) + '/hr · past ' + label + '</div>';
+      }
+    }
     var attrs = ' data-focus="1" data-flabel="' + r.name + '" data-fcost="' + used + '" data-ftok="' + r.w.tokens + '"';
     var right = r.budget != null
       ? '<b>' + pct + '%</b> · ' + fmtCost(used) + ' / ' + fmtCost(r.budget)
       : '<b>' + pct + '%</b> · ' + fmtCost(used);
     return '<div class="limitrow"' + attrs + '><div class="limitrow__top"><span class="limitrow__name">' + r.name + '</span>' +
       '<span class="limitrow__val">' + right + '</span></div>' +
-      barHtml(Math.min(100, pct), barClass(pct)) + reset + '</div>';
+      barHtml(Math.min(100, pct), barClass(pct)) + reset + burn + '</div>';
   }).join('');
 }
 

@@ -397,11 +397,14 @@ function showDoneOverlay(sid) {
   }).catch(function () {});
 }
 
-var VIBE_LABEL = { office: 'Office', garage: 'Garage', courchevel: 'Courchevel', paris: 'Paris' };
+var VIBE_LABEL = { office: 'Office', garage: 'Garage', courchevel: 'Courchevel', paris: 'Paris', saturn: 'Saturn', earth: 'Earth' };
 var STEAM_POS = {
   office: { left: '60%', top: '63%' }, garage: { left: '57%', top: '66%' },
   courchevel: { left: '58%', top: '70%' }, paris: { left: '60%', top: '72%' },
+  saturn: { left: '66%', top: '71%' }, earth: { left: '64%', top: '71%' },
 };
+// vibes available per mode (the office image sets)
+var MODE_VIBES = { claude: ['office', 'garage', 'courchevel', 'paris'], codex: ['saturn', 'earth'] };
 
 function buildLights() {
   if (state.lightsBuilt) return;
@@ -454,9 +457,11 @@ function renderOffice() {
   if (ns !== 'done') hideDoneOverlay();
 
   // scene image: at the desk only while actually working, standing otherwise
-  var vibe = state.vibe || 'office';
+  var mode = state.mode || 'claude';
+  var vibe = state.vibe || (mode === 'codex' ? 'saturn' : 'office');
+  if (MODE_VIBES[mode].indexOf(vibe) === -1) vibe = MODE_VIBES[mode][0]; // keep vibe valid for the mode
   var atDesk = (ns === 'working');
-  var src = 'assets/Claude' + VIBE_LABEL[vibe] + (atDesk ? 'Work' : '') + '.png';
+  var src = 'assets/' + (mode === 'codex' ? 'Codex' : 'Claude') + VIBE_LABEL[vibe] + (atDesk ? 'Work' : '') + '.png';
   var img = document.getElementById('scene-img');
   if (img.getAttribute('src') !== src) img.setAttribute('src', src);
 
@@ -1100,8 +1105,41 @@ document.getElementById('plan-select').addEventListener('change', function (e) {
     .catch(function () {});
 });
 
-// office vibe selector (office | garage)
-try { state.vibe = localStorage.getItem('pulse-vibe') || 'office'; } catch (e) { state.vibe = 'office'; }
+// dashboard mode: claude (warm, original) or codex (mono, black & white),
+// chosen on a glass entry screen, switchable later by clicking the logo.
+function applyMode(m) {
+  state.mode = m;
+  document.documentElement.setAttribute('data-mode', m);
+  try { localStorage.setItem('pulse-mode', m); } catch (e) {}
+  if (MODE_VIBES[m].indexOf(state.vibe) === -1) {
+    state.vibe = MODE_VIBES[m][0];
+    try { localStorage.setItem('pulse-vibe', state.vibe); } catch (e) {}
+  }
+  setVibeButtons();
+  if (state.stats) render();
+}
+(function () {
+  var stored;
+  try { stored = localStorage.getItem('pulse-mode'); } catch (e) {}
+  state.mode = stored || 'claude';
+  document.documentElement.setAttribute('data-mode', state.mode);
+  var pick = document.getElementById('mode-pick');
+  if (pick) {
+    if (!stored) pick.hidden = false; // first visit: ask which dashboard
+    pick.addEventListener('click', function (e) {
+      var c = e.target.closest('[data-pick]');
+      if (!c) return;
+      applyMode(c.getAttribute('data-pick'));
+      pick.hidden = true;
+    });
+  }
+  var brand = document.querySelector('.brand');
+  if (brand) { brand.style.cursor = 'pointer'; brand.title = 'switch dashboard'; brand.addEventListener('click', function () { if (pick) pick.hidden = false; }); }
+})();
+
+// office vibe selector
+try { state.vibe = localStorage.getItem('pulse-vibe') || (state.mode === 'codex' ? 'saturn' : 'office'); } catch (e) { state.vibe = 'office'; }
+if (MODE_VIBES[state.mode] && MODE_VIBES[state.mode].indexOf(state.vibe) === -1) state.vibe = MODE_VIBES[state.mode][0];
 var vibeSeg = document.getElementById('vibe-seg');
 if (vibeSeg) vibeSeg.addEventListener('click', function (e) {
   var b = e.target.closest('button[data-vibe]');

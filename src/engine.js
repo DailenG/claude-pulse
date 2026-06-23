@@ -183,7 +183,7 @@ function addToBucket(b, e, pricing) {
   b.count++;
 }
 
-function scan(config, nowMs) {
+function scan(config, nowMs, calibrateAt) {
   const now = nowMs || Date.now();
   const pricing = config.pricing;
 
@@ -226,6 +226,10 @@ function scan(config, nowMs) {
   const weekStart = startOfLocalWeek(now);
   const hourStart = now - 3600 * 1000;
   const fiveHourStart = now - 5 * 3600 * 1000;
+  // optional: cost in the 5h window ending at a past limit hit, used to calibrate
+  // the real ceiling (what your usage actually was when you hit the limit).
+  const calStart = calibrateAt ? calibrateAt - 5 * 3600 * 1000 : 0;
+  const calBucket = calibrateAt ? newBucket() : null;
 
   const windows = {
     hour: newBucket(),
@@ -265,6 +269,7 @@ function scan(config, nowMs) {
     if (e.t >= fiveHourStart) addToBucket(windows.fiveHour, e, pricing);
     if (e.t >= dayStart) addToBucket(windows.today, e, pricing);
     if (e.t >= weekStart) addToBucket(windows.week, e, pricing);
+    if (calBucket && e.t >= calStart && e.t <= calibrateAt) addToBucket(calBucket, e, pricing);
 
     const mk = modelKey(e.model);
     (byModel[mk] = byModel[mk] || newBucket());
@@ -437,6 +442,7 @@ function scan(config, nowMs) {
     eta,
     resets,
     peaks,
+    calCeiling: calBucket ? calBucket.cost : null,
     budgets: config.budgets,
     context,
     active: active ? sessionsOut.find(s => s.sid === active.sid) || null : null,

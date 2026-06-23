@@ -64,7 +64,8 @@ function getStats() {
   if (statsCache.data && now - statsCache.at < 1200) return statsCache.data;
 
   const config = loadConfig();
-  const data = scan(config);
+  const hit = limits.latestHit(now);
+  const data = scan(config, now, hit ? hit.hitT : null);
 
   // strip synthetic / empty model buckets for a clean breakdown
   for (const k of Object.keys(data.byModel)) {
@@ -80,7 +81,10 @@ function getStats() {
   data.pending = approvals.readPending();
   data.rules = approvals.readRules();
   data.ntfyTopic = config.ntfyTopic || '';
-  data.limitHit = limits.detectLimit(now);
+  data.limitHit = hit && hit.active ? hit : null;
+  // the real ceiling: your 5h spend at the moment you last hit the limit (within
+  // 24h). When present, the bars use it instead of the all-time peak guess.
+  data.limitCeiling = data.calCeiling && data.calCeiling > 0 ? data.calCeiling : null;
 
   statsCache = { at: now, data };
   return data;

@@ -214,7 +214,9 @@ function renderLimitBars(container, s) {
   container.innerHTML = rows.map(function (r) {
     var used = r.w.cost;
     var peakKey = r.fk === 'today' ? 'day' : r.fk;
-    var denom = r.budget != null ? r.budget : peaks[peakKey];
+    // a real ceiling learned from your last limit hit beats the all-time peak guess (5h only)
+    var capVal = r.budget != null ? r.budget : ((r.fk === 'fiveHour' && s.limitCeiling) ? s.limitCeiling : null);
+    var denom = capVal != null ? capVal : peaks[peakKey];
     var pct = denom ? Math.round(used / denom * 100) : 0;
     var rt = resetText(s, r.fk);
     var reset = rt ? '<div class="limitrow__reset">' + rt + '</div>' : '';
@@ -224,15 +226,15 @@ function renderLimitBars(container, s) {
       var rate = (s.windows.hour && s.windows.hour.cost) || 0; // cost in the last hour ~ $/hour
       if (rate > 0.01 && denom) {
         var remaining = denom - used;
-        var label = r.budget != null ? 'your 5h budget' : 'your usual 5h peak';
+        var label = r.budget != null ? 'your 5h budget' : (s.limitCeiling ? 'your real limit' : 'your usual 5h peak');
         burn = remaining > 0
           ? '<div class="limitrow__burn">burning ~' + fmtCost(rate) + '/hr · ~' + dur(remaining / rate * 3600000) + ' to ' + label + '</div>'
           : '<div class="limitrow__burn">burning ~' + fmtCost(rate) + '/hr · past ' + label + '</div>';
       }
     }
     var attrs = ' data-focus="1" data-flabel="' + r.name + '" data-fcost="' + used + '" data-ftok="' + r.w.tokens + '"';
-    var right = r.budget != null
-      ? '<b>' + pct + '%</b> · ' + fmtCost(used) + ' / ' + fmtCost(r.budget)
+    var right = capVal != null
+      ? '<b>' + pct + '%</b> · ' + fmtCost(used) + ' / ' + fmtCost(capVal)
       : '<b>' + pct + '%</b> · ' + fmtCost(used);
     return '<div class="limitrow"' + attrs + '><div class="limitrow__top"><span class="limitrow__name">' + r.name + '</span>' +
       '<span class="limitrow__val">' + right + '</span></div>' +

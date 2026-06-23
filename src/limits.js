@@ -42,9 +42,10 @@ function textOf(o) {
   return '';
 }
 
-// The most recent real limit hit that is still in effect (reset still ahead),
-// or null. Cached for 20s; cheap because files without the phrase are skipped.
-function detectLimit(nowMs) {
+// The most recent real limit hit within the last 24h, or null. Carries the hit
+// time (to calibrate the real ceiling from), the parsed reset time, and whether
+// that reset is still ahead (active). Cached 20s; files without the phrase skip.
+function latestHit(nowMs) {
   const now = nowMs || Date.now();
   if (cache.result !== undefined && now - cache.at < 20000) return cache.result;
   let best = null;
@@ -59,7 +60,7 @@ function detectLimit(nowMs) {
       const fp = path.join(dp, files[fi]);
       let st;
       try { st = fs.statSync(fp); } catch (e) { continue; }
-      if (now - st.mtimeMs > 8 * 3600 * 1000) continue; // only recently active logs
+      if (now - st.mtimeMs > 26 * 3600 * 1000) continue; // only logs touched in the last day
       let raw;
       try { raw = fs.readFileSync(fp, 'utf8'); } catch (e) { continue; }
       if (raw.indexOf('hit your') === -1) continue; // fast skip
@@ -79,15 +80,18 @@ function detectLimit(nowMs) {
     }
   }
   let result = null;
-  if (best) {
+  if (best && now - best.hitT < 24 * 3600 * 1000) {
     const resetsAt = resetTimestamp(best.timeStr, best.hitT);
-    // still in effect only if the hit is recent and its reset has not passed
-    if (resetsAt && resetsAt > now && now - best.hitT < 6 * 3600 * 1000) {
-      result = { hitT: best.hitT, resetsAt: resetsAt, resetText: best.timeStr, tz: best.tz };
-    }
+    result = { hitT: best.hitT, resetsAt: resetsAt, resetText: best.timeStr, tz: best.tz, active: !!(resetsAt && resetsAt > now) };
   }
   cache = { at: now, result: result };
   return result;
 }
 
-module.exports = { detectLimit, resetTimestamp };
+// Active limit (reset still ahead) for the banner, or null.
+function detectLimit(nowMs) {
+  const h = latestHit(nowMs);
+  return h && h.active ? h : null;
+}
+
+module.exports = { detectLimit, latestHit, resetTimestamp };

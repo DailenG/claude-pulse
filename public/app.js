@@ -975,6 +975,7 @@ function renderSession() {
         '<a class="chip chip--accent" style="text-decoration:none" target="_blank" rel="noopener" href="/transcript?sid=' + encodeURIComponent(state.sessionSid || '') + '">open transcript</a>' +
         '<a class="chip chip--accent" style="text-decoration:none" href="/api/export?sid=' + encodeURIComponent(state.sessionSid || '') + '&dl=1">download .md</a>' +
         '<button class="chip chip--accent resume-btn" style="border:0;cursor:pointer">copy resume cmd</button>' +
+        '<button class="chip chip--accent handoff-btn" style="border:0;cursor:pointer">copy handoff</button>' +
       '</div>' +
       '<div class="card__head" style="margin-top:18px"><span class="card__title">Usage growth per request</span>' +
         '<span class="card__hint">cumulative ' + state.chartMetric + '</span></div>' +
@@ -1030,6 +1031,34 @@ document.addEventListener('click', function (e) {
   try { if (navigator.clipboard) navigator.clipboard.writeText(cmd); } catch (err) {}
   rb.textContent = 'copied!';
   setTimeout(function () { rb.textContent = 'copy resume cmd'; }, 1500);
+});
+
+// copy a compact handoff brief to paste into a fresh session
+document.addEventListener('click', function (e) {
+  var hb = e.target.closest('.handoff-btn');
+  if (!hb) return;
+  e.stopPropagation();
+  var d = state.session;
+  if (!d) return;
+  var m = d.meta || {};
+  var turns = (d.turns || []).slice(-5);
+  var lines = [];
+  lines.push('Continue this work in a fresh session. Here is where we left off.');
+  lines.push('');
+  lines.push('Project: ' + (m.project || '?') + ' (' + (d.turns ? d.turns.length : 0) + ' turns so far)');
+  if (m.title) lines.push('Topic: ' + m.title);
+  lines.push('');
+  lines.push('Recent context:');
+  turns.forEach(function (t) {
+    if (t.prompt) lines.push('- I asked: ' + t.prompt.replace(/\s+/g, ' ').slice(0, 220));
+    if (t.text) lines.push('  Claude: ' + t.text.replace(/\s+/g, ' ').slice(0, 220));
+  });
+  lines.push('');
+  lines.push('For the full history run: claude-pulse recover ' + (state.sessionSid || ''));
+  lines.push('Pick up from here.');
+  try { if (navigator.clipboard) navigator.clipboard.writeText(lines.join('\n')); } catch (err) {}
+  hb.textContent = 'copied!';
+  setTimeout(function () { hb.textContent = 'copy handoff'; }, 1500);
 });
 
 // open a session from any linked row (but not when toggling a number)

@@ -12,6 +12,7 @@ const search = require('./search');
 const snapshots = require('./snapshots');
 const phonepage = require('./phonepage');
 const ntfy = require('./ntfy');
+const limits = require('./limits');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
@@ -79,6 +80,7 @@ function getStats() {
   data.pending = approvals.readPending();
   data.rules = approvals.readRules();
   data.ntfyTopic = config.ntfyTopic || '';
+  data.limitHit = limits.detectLimit(now);
 
   statsCache = { at: now, data };
   return data;

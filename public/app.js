@@ -681,6 +681,18 @@ function hexA(hex, a) {
 }
 
 // ---------- top-level render ----------
+function renderLimitBanner(s) {
+  var el = document.getElementById('limit-banner');
+  if (!el) return;
+  var h = s && s.limitHit;
+  if (!h || !h.resetsAt || h.resetsAt <= Date.now()) { el.hidden = true; return; }
+  el.hidden = false;
+  el.innerHTML =
+    '<span class="limit-banner__dot"></span>' +
+    '<span class="limit-banner__text">Usage limit reached</span>' +
+    '<span class="limit-banner__meta">resets at ' + esc(h.resetText) + ' · in ' + dur(h.resetsAt - Date.now()) + '</span>';
+}
+
 function render() {
   document.body.classList.toggle('office-mode', state.tab === 'office');
   var s = state.stats;
@@ -722,6 +734,8 @@ function render() {
     wEl.hidden = true;
     document.title = 'Pulse for Claude Code';
   }
+
+  renderLimitBanner(s);
 
   var tab = state.tab;
   if (tab === 'overview') renderOverview();

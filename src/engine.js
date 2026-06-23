@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { priceFor } = require('./config');
+const codex = require('./codex');
 
 const PROJECTS_DIR = path.join(os.homedir(), '.claude', 'projects');
 
@@ -147,6 +148,18 @@ function getFileData(fp) {
   return data;
 }
 
+// same, for an OpenAI Codex rollout file (cached by mtime under a codex: key)
+function getCodexFileData(fp) {
+  let st;
+  try { st = fs.statSync(fp); } catch (e) { return null; }
+  const key = 'codex:' + fp;
+  const cached = fileCache.get(key);
+  if (cached && cached.mtimeMs === st.mtimeMs && cached.size === st.size) return cached.data;
+  const data = codex.parseFile(fp);
+  fileCache.set(key, { mtimeMs: st.mtimeMs, size: st.size, data });
+  return data;
+}
+
 // ---- aggregation helpers ----
 
 function entryTokens(e) {
@@ -218,6 +231,18 @@ function scan(config, nowMs, calibrateAt) {
         cur.lastAssistantT = fs0.lastAssistantT;
         cur.lastStopReason = fs0.lastStopReason;
         cur.lastWasError = fs0.lastWasError;
+      }
+    }
+  }
+
+  // fold in OpenAI Codex CLI sessions too (set "codex": false in config to disable)
+  if (config.codex !== false) {
+    for (const fp of codex.listCodexFiles()) {
+      const d = getCodexFileData(fp);
+      if (!d) continue;
+      for (const e of d.tokens) allTokens.push(e);
+      for (const cs of Object.keys(d.sessions)) {
+        if (!sessions[cs]) sessions[cs] = Object.assign({}, d.sessions[cs]);
       }
     }
   }
@@ -335,6 +360,7 @@ function scan(config, nowMs, calibrateAt) {
       project: s.project || 'unknown',
       cwd: s.cwd,
       model: modelKey(s.model),
+      source: s.source || 'claude',
       lastPrompt: s.lastPrompt,
       firstT: s.firstT,
       lastT: s.lastT,

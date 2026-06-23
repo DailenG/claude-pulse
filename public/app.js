@@ -134,7 +134,7 @@ function renderSessions() {
     return '<div class="trow trow--link" data-sid="' + esc(x.sid) + '">' +
       '<span class="dot ' + (x.active ? 'is-on' : '') + '"></span>' +
       '<span class="trow__title">' + esc(x.title) + ' <small>' + esc(x.project) + '</small></span>' +
-      '<span class="trow__model"><span class="chip">' + esc(x.model) + '</span></span>' +
+      '<span class="trow__model">' + (x.source === 'codex' ? '<span class="chip chip--codex">Codex</span> ' : '') + '<span class="chip">' + esc(x.model) + '</span></span>' +
       '<span class="trow__num">' + fmtTokens(x.tokens) + '</span>' +
       '<span class="trow__num trow__cost">' + fmtCost(x.cost) + '</span>' +
       '<span class="trow__num">' + relTime(x.lastT) + '</span>' +

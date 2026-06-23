@@ -11,6 +11,7 @@ const PRICING = {
   opus:    { in: 15, out: 75, cacheWrite: 18.75, cacheRead: 1.5 },
   sonnet:  { in: 3,  out: 15, cacheWrite: 3.75,  cacheRead: 0.3 },
   haiku:   { in: 1,  out: 5,  cacheWrite: 1.25,  cacheRead: 0.1 },
+  gpt:     { in: 1.25, out: 10, cacheWrite: 1.25, cacheRead: 0.125 }, // OpenAI Codex, rough GPT-5 class estimate
   default: { in: 3,  out: 15, cacheWrite: 3.75,  cacheRead: 0.3 },
 };
 
@@ -31,6 +32,7 @@ function priceFor(model, pricing) {
   if (m.includes('opus')) return p.opus;
   if (m.includes('sonnet')) return p.sonnet;
   if (m.includes('haiku')) return p.haiku;
+  if (p.gpt && (m.includes('gpt') || m.includes('codex'))) return p.gpt;
   return p.default;
 }
 

@@ -408,6 +408,8 @@ body.office-mode .abtn { padding: 12px 20px; font-size: 15px; }
 .limit-banner__text { font-weight: 600; color: var(--text); }
 .limit-banner__meta { color: var(--muted); font-size: 13px; margin-left: auto; }
 
+.chip--codex { background: rgba(16, 163, 127, 0.16); color: #10a37f; }
+
 .foot a { color: var(--accent); text-decoration: none; }
 
 /* ===== Footer ===== */

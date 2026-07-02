@@ -4,6 +4,8 @@
   "contextLimit": 200000,
   "idleMinutes": 10,
   "ntfyTopic": "",
+  "ntfyServer": "ntfy.sh",
+  "ntfyServerHttps": true,
   "approvalTimeoutMs": 60000,
   "snapshotMinutes": 15,
   "bindLan": false,

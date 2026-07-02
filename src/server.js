@@ -156,7 +156,8 @@ function createServer() {
     if (url === '/api/test-push') {
       const cfg = loadConfig();
       if (!cfg.ntfyTopic) return sendJson(res, { ok: false, error: 'no-topic' });
-      const rt = 'https://ntfy.sh/' + encodeURIComponent(cfg.ntfyTopic + '-reply');
+      const proto = cfg.ntfyServerHttps !== false ? 'https' : 'http';
+      const rt = proto + '://' + (cfg.ntfyServer || 'ntfy.sh') + '/' + encodeURIComponent(cfg.ntfyTopic + '-reply');
       ntfy.push(cfg.ntfyTopic, {
         title: 'Pulse test',
         message: 'If you can see this with Allow / Deny buttons, your phone is connected.',

@@ -20,6 +20,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const https = require('https');
+const http = require('http');
 const { spawn } = require('child_process');
 
 const DIR = path.join(os.homedir(), '.claude-pulse');
@@ -78,11 +79,14 @@ function lanIp() {
   return '';
 }
 function pushNtfy(input) {
-  var topic = '';
-  try { topic = (readJson(CONFIG, {}) || {}).ntfyTopic || ''; } catch (e) {}
+  var cfg = readJson(CONFIG, {}) || {};
+  var topic = cfg.ntfyTopic || '';
   if (!topic) return Promise.resolve();
   var tool = input._tool, summary = input._summary, id = input._id, project = input._project;
-  var rt = 'https://ntfy.sh/' + encodeURIComponent(topic + '-reply');
+  var proto = cfg.ntfyServerHttps !== false ? 'https' : 'http';
+  var server = cfg.ntfyServer || 'ntfy.sh';
+  var transport = cfg.ntfyServerHttps !== false ? https : http;
+  var rt = proto + '://' + server + '/' + encodeURIComponent(topic + '-reply');
   return new Promise(function (resolve) {
     // the buttons post the answer back through ntfy; Pulse is subscribed to the
     // reply topic, so no LAN, IP or open port is needed. Works anywhere.
@@ -97,7 +101,7 @@ function pushNtfy(input) {
     };
     var data = Buffer.from(String(summary || tool), 'utf8');
     headers['Content-Length'] = data.length;
-    var req = https.request({ method: 'POST', hostname: 'ntfy.sh', path: '/' + encodeURIComponent(topic), headers: headers },
+    var req = transport.request({ method: 'POST', hostname: server, path: '/' + encodeURIComponent(topic), headers: headers },
       function (res) { res.on('data', function () {}); res.on('end', resolve); });
     req.on('error', resolve); req.write(data); req.end();
     setTimeout(resolve, 2500);

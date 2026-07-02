@@ -6,7 +6,9 @@
 // the phone only needs the ntfy app subscribed to your topic. Works anywhere.
 
 const https = require('https');
+const http = require('http');
 const approvals = require('./approvals');
+const config = require('./config');
 
 function replyTopic(topic) { return topic ? topic + '-reply' : ''; }
 
@@ -22,7 +24,9 @@ function push(topic, opts) {
   const data = Buffer.from(String(o.message || ''), 'utf8');
   headers['Content-Length'] = data.length;
   try {
-    const req = https.request({ method: 'POST', hostname: 'ntfy.sh', path: '/' + encodeURIComponent(topic), headers: headers },
+    const cfg = config.loadConfig();
+    const transport = cfg.ntfyServerHttps ? https : http;
+    const req = transport.request({ method: 'POST', hostname: cfg.ntfyServer, path: '/' + encodeURIComponent(topic), headers: headers },
       (res) => { res.on('data', () => {}); res.on('end', () => {}); });
     req.on('error', () => {});
     req.write(data); req.end();
@@ -62,7 +66,9 @@ function connect(topic) {
   const path = '/' + encodeURIComponent(replyTopic(topic)) + '/json';
   let req;
   try {
-    req = https.get({ hostname: 'ntfy.sh', path: path }, (res) => {
+    const cfg = config.loadConfig();
+    const transport = cfg.ntfyServerHttps ? https : http;
+    req = transport.get({ hostname: cfg.ntfyServer, path: path }, (res) => {
       if (res.statusCode !== 200) { res.resume(); return scheduleReconnect(topic); }
       let buf = '';
       res.setEncoding('utf8');

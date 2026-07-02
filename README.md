@@ -233,6 +233,9 @@ that topic, then set it in `~/.claude-pulse.json`:
 { "ntfyTopic": "claude-pulse-9f3a7c" }
 ```
 
+If you self-host ntfy, add `"ntfyServer"` and `"ntfyServerHttps"` to point at
+your own instance (see `config.example.json`).
+
 With the hooks above wired, the `Notification` hook pushes when Claude is waiting
 for you, and the `Stop` hook pushes when a turn finishes (debounced to 30s so a
 back and forth does not spam you). Anyone who knows the topic can read it, so use
@@ -275,7 +278,8 @@ optional features change that, and both are off until you turn them on:
   [ntfy.sh](https://ntfy.sh) relay. Approval prompts (with a short command
   summary) and your taps pass through a topic you name, so anyone who learns the
   topic can read those prompts and answer them. Use a long random topic, and
-  self-host ntfy or use ntfy access tokens if you want stronger guarantees. Pulse
+  self-host ntfy (set `ntfyServer` and `ntfyServerHttps` in config) or use ntfy
+  access tokens if you want stronger guarantees. Pulse
   only acts on a reply while it is genuinely waiting for that exact request, so a
   stale or guessed message cannot approve anything by itself.
 - **LAN access (`bindLan`)** binds the server to your whole network so a phone on

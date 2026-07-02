@@ -25,6 +25,7 @@ function push(topic, opts) {
   headers['Content-Length'] = data.length;
   try {
     const cfg = config.loadConfig();
+    if (cfg.ntfyToken) headers.Authorization = 'Bearer ' + cfg.ntfyToken;
     const transport = cfg.ntfyServerHttps ? https : http;
     const req = transport.request({ method: 'POST', hostname: cfg.ntfyServer, path: '/' + encodeURIComponent(topic), headers: headers },
       (res) => { res.on('data', () => {}); res.on('end', () => {}); });
@@ -63,11 +64,11 @@ function scheduleReconnect(topic) {
 }
 
 function connect(topic) {
-  const path = '/' + encodeURIComponent(replyTopic(topic)) + '/json';
   let req;
   try {
     const cfg = config.loadConfig();
     const transport = cfg.ntfyServerHttps ? https : http;
+    const path = '/' + encodeURIComponent(replyTopic(topic)) + '/json' + (cfg.ntfyToken ? '?auth=' + encodeURIComponent(cfg.ntfyToken) : '');
     req = transport.get({ hostname: cfg.ntfyServer, path: path }, (res) => {
       if (res.statusCode !== 200) { res.resume(); return scheduleReconnect(topic); }
       let buf = '';

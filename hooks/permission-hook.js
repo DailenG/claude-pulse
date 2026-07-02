@@ -101,6 +101,7 @@ function pushNtfy(input) {
     };
     var data = Buffer.from(String(summary || tool), 'utf8');
     headers['Content-Length'] = data.length;
+    if (cfg.ntfyToken) headers.Authorization = 'Bearer ' + cfg.ntfyToken;
     var req = transport.request({ method: 'POST', hostname: server, path: '/' + encodeURIComponent(topic), headers: headers },
       function (res) { res.on('data', function () {}); res.on('end', resolve); });
     req.on('error', resolve); req.write(data); req.end();

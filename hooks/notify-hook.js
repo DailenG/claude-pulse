@@ -73,15 +73,17 @@ function pushNtfy(topic, title, message, tags) {
   const transport = cfg.ntfyServerHttps !== false ? https : http;
   return new Promise(function (resolve) {
     var data = Buffer.from(message || '', 'utf8');
+    var headers = {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Content-Length': data.length,
+      'Title': String(title || 'Claude Code').replace(/[^\x20-\x7E]/g, ''),
+      'Tags': tags || 'warning',
+      'Priority': 'high',
+    };
+    if (cfg.ntfyToken) headers.Authorization = 'Bearer ' + cfg.ntfyToken;
     var req = transport.request({
       method: 'POST', hostname: cfg.ntfyServer || 'ntfy.sh', path: '/' + encodeURIComponent(topic),
-      headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
-        'Content-Length': data.length,
-        'Title': String(title || 'Claude Code').replace(/[^\x20-\x7E]/g, ''),
-        'Tags': tags || 'warning',
-        'Priority': 'high',
-      },
+      headers: headers,
     }, function (res) { res.on('data', function () {}); res.on('end', resolve); });
     req.on('error', resolve);
     req.write(data); req.end();

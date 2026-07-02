@@ -40,15 +40,17 @@ function push(t, title, msg, tags) {
   const transport = cfg.ntfyServerHttps !== false ? https : http;
   return new Promise(function (res) {
     var data = Buffer.from(msg || '', 'utf8');
+    var headers = {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Content-Length': data.length,
+      'Title': String(title || 'Claude Code').replace(/[^\x20-\x7E]/g, ''),
+      'Tags': tags || 'white_check_mark',
+      'Priority': 'default',
+    };
+    if (cfg.ntfyToken) headers.Authorization = 'Bearer ' + cfg.ntfyToken;
     var req = transport.request({
       method: 'POST', hostname: cfg.ntfyServer || 'ntfy.sh', path: '/' + encodeURIComponent(t),
-      headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
-        'Content-Length': data.length,
-        'Title': String(title || 'Claude Code').replace(/[^\x20-\x7E]/g, ''),
-        'Tags': tags || 'white_check_mark',
-        'Priority': 'default',
-      },
+      headers: headers,
     }, function (r) { r.on('data', function () {}); r.on('end', res); });
     req.on('error', res);
     req.write(data); req.end();

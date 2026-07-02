@@ -6,6 +6,7 @@
   "ntfyTopic": "",
   "ntfyServer": "ntfy.sh",
   "ntfyServerHttps": true,
+  "ntfyToken": "",
   "approvalTimeoutMs": 60000,
   "snapshotMinutes": 15,
   "bindLan": false,

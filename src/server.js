@@ -12,6 +12,7 @@ const search = require('./search');
 const snapshots = require('./snapshots');
 const phonepage = require('./phonepage');
 const ntfy = require('./ntfy');
+const limits = require('./limits');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
@@ -63,7 +64,8 @@ function getStats() {
   if (statsCache.data && now - statsCache.at < 1200) return statsCache.data;
 
   const config = loadConfig();
-  const data = scan(config);
+  const hit = limits.latestHit(now);
+  const data = scan(config, now, hit ? hit.hitT : null);
 
   // strip synthetic / empty model buckets for a clean breakdown
   for (const k of Object.keys(data.byModel)) {
@@ -78,6 +80,11 @@ function getStats() {
   data.notifications = events.slice(0, 10);
   data.pending = approvals.readPending();
   data.rules = approvals.readRules();
+  data.ntfyTopic = config.ntfyTopic || '';
+  data.limitHit = hit && hit.active ? hit : null;
+  // the real ceiling: your 5h spend at the moment you last hit the limit (within
+  // 24h). When present, the bars use it instead of the all-time peak guess.
+  data.limitCeiling = data.calCeiling && data.calCeiling > 0 ? data.calCeiling : null;
 
   statsCache = { at: now, data };
   return data;
@@ -90,8 +97,15 @@ function serveStatic(req, res) {
   if (!fp.startsWith(PUBLIC_DIR)) { res.writeHead(403); res.end('forbidden'); return; }
   fs.readFile(fp, (err, buf) => {
     if (err) { res.writeHead(404); res.end('not found'); return; }
-    // never cache the dashboard assets, so a refresh always shows the latest UI
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(fp)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
+    // never cache the dashboard assets, so a refresh always shows the latest UI.
+    // CSP keeps an injected script from posting your session data off-machine
+    // (connect-src 'self'); inline script/style are allowed so the UI still works.
+    res.writeHead(200, {
+      'Content-Type': MIME[path.extname(fp)] || 'application/octet-stream',
+      'Cache-Control': 'no-store',
+      'Content-Security-Policy': "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'",
+      'X-Content-Type-Options': 'nosniff',
+    });
     res.end(buf);
   });
 }
@@ -139,6 +153,31 @@ function createServer() {
     if (url === '/api/stats') return sendJson(res, getStats());
     if (url === '/api/events') return handleSse(req, res);
     if (url === '/api/health') return sendJson(res, { ok: true });
+    if (url === '/api/test-push') {
+      const cfg = loadConfig();
+      if (!cfg.ntfyTopic) return sendJson(res, { ok: false, error: 'no-topic' });
+      const rt = 'https://ntfy.sh/' + encodeURIComponent(cfg.ntfyTopic + '-reply');
+      ntfy.push(cfg.ntfyTopic, {
+        title: 'Pulse test',
+        message: 'If you can see this with Allow / Deny buttons, your phone is connected.',
+        tags: 'lock', priority: 'high',
+        actions: [
+          'http, Allow, ' + rt + ', method=POST, body=test|ok|x, clear=true',
+          'http, Deny, ' + rt + ', method=POST, body=test|no|x, clear=true',
+        ].join('; '),
+      });
+      return sendJson(res, { ok: true });
+    }
+    if (url === '/api/gen-topic' && req.method === 'POST') {
+      // alphabet with no l, 1, i, o, 0 so the topic is safe to type by hand
+      const alphabet = 'abcdefghjkmnpqrstvwxyz23456789';
+      let t = 'claude-pulse-';
+      for (let i = 0; i < 8; i++) t += alphabet[Math.floor(Math.random() * alphabet.length)];
+      saveConfig({ ntfyTopic: t });
+      try { ntfy.subscribeReplies(t); } catch (e) {}
+      statsCache.at = 0;
+      return sendJson(res, { ok: true, topic: t });
+    }
     if (url === '/api/session') {
       const q = new URLSearchParams(req.url.split('?')[1] || '');
       const sid = q.get('sid');

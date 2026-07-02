@@ -13,15 +13,34 @@
   <link rel="apple-touch-icon" href="favicon.svg" />
   <link rel="stylesheet" href="style.css" />
   <script>
-    // set theme before paint to avoid a flash
+    // set theme + mode before paint to avoid a flash
     try {
       var t = localStorage.getItem('pulse-theme');
       if (!t) t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
       document.documentElement.setAttribute('data-theme', t);
+      var m = localStorage.getItem('pulse-mode');
+      if (m) document.documentElement.setAttribute('data-mode', m);
     } catch (e) {}
   </script>
 </head>
 <body>
+  <div class="mode-pick" id="mode-pick" hidden>
+    <div class="mode-pick__inner">
+      <div class="mode-pick__title">Choose your dashboard</div>
+      <div class="mode-pick__cards">
+        <button class="mode-pick__card mode-pick__card--claude" data-pick="claude">
+          <span class="mode-pick__name">Claude Code</span>
+          <span class="mode-pick__sub">warm &middot; the original</span>
+        </button>
+        <button class="mode-pick__card mode-pick__card--codex" data-pick="codex">
+          <span class="mode-pick__name">Codex</span>
+          <span class="mode-pick__sub">mono &middot; black &amp; white</span>
+        </button>
+      </div>
+      <div class="mode-pick__hint">switch anytime by clicking the logo</div>
+    </div>
+  </div>
+
   <header class="topbar">
     <div class="brand">
       <svg class="brand__mark" viewBox="0 0 64 64" width="22" height="22" aria-hidden="true">
@@ -51,10 +70,12 @@
         <span class="ready__pct" id="ready-pct"></span>
       </span>
       <span class="seg vibe-seg" id="vibe-seg">
-        <button data-vibe="office">Office</button>
-        <button data-vibe="garage">Garage</button>
-        <button data-vibe="courchevel">Chalet</button>
-        <button data-vibe="paris">Paris</button>
+        <button data-vibe="office" data-mv="claude">Office</button>
+        <button data-vibe="garage" data-mv="claude">Garage</button>
+        <button data-vibe="courchevel" data-mv="claude">Chalet</button>
+        <button data-vibe="paris" data-mv="claude">Paris</button>
+        <button data-vibe="saturn" data-mv="codex">Saturn</button>
+        <button data-vibe="earth" data-mv="codex">Earth</button>
       </span>
       <span class="rank" id="rank-badge" title="your vibe, by all-time tokens"></span>
       <select class="plan-select" id="plan-select" title="your plan">
@@ -78,12 +99,15 @@
     <span class="waiting__meta" id="waiting-meta"></span>
   </div>
 
+  <div class="limit-banner" id="limit-banner" hidden></div>
+
   <div class="approvals" id="approvals" hidden></div>
 
   <main class="main">
     <!-- Overview -->
     <section class="panel is-active" id="panel-overview">
       <div class="cards" id="ov-cards"></div>
+      <div class="card" id="ov-phone" hidden></div>
       <div class="card" id="ov-active-sessions"></div>
       <div class="ov-grid">
         <div class="card card--active" id="ov-active"></div>
@@ -135,6 +159,10 @@
           <div class="card__head"><span class="card__title">By project</span></div>
           <div id="usage-projects"></div>
         </div>
+      </div>
+      <div class="card">
+        <div class="card__head"><span class="card__title">Tool calls</span><span class="card__hint">all time</span></div>
+        <div id="usage-tools"></div>
       </div>
       <div class="card">
         <div class="card__head"><span class="card__title">Token composition</span><span class="card__hint">all time</span></div>

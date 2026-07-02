@@ -76,6 +76,7 @@ function renderOverview() {
   }).join('');
 
   renderActiveSessions(s);
+  renderPhoneCard(s);
 
   // active session
   var a = s.active;
@@ -133,7 +134,7 @@ function renderSessions() {
     return '<div class="trow trow--link" data-sid="' + esc(x.sid) + '">' +
       '<span class="dot ' + (x.active ? 'is-on' : '') + '"></span>' +
       '<span class="trow__title">' + esc(x.title) + ' <small>' + esc(x.project) + '</small></span>' +
-      '<span class="trow__model"><span class="chip">' + esc(x.model) + '</span></span>' +
+      '<span class="trow__model">' + (x.source === 'codex' ? '<span class="chip chip--codex">Codex</span> ' : '') + '<span class="chip">' + esc(x.model) + '</span></span>' +
       '<span class="trow__num">' + fmtTokens(x.tokens) + '</span>' +
       '<span class="trow__num trow__cost">' + fmtCost(x.cost) + '</span>' +
       '<span class="trow__num">' + relTime(x.lastT) + '</span>' +
@@ -148,6 +149,7 @@ function renderUsage() {
   chart(document.getElementById('usage-daily'), seriesFor(s, '30d'), 'bars');
   document.getElementById('usage-models').innerHTML = breakdownHtml(s.byModel);
   document.getElementById('usage-projects').innerHTML = breakdownHtml(s.byProject);
+  document.getElementById('usage-tools').innerHTML = toolsHtml(s.byTool || {});
 
   var t = s.windows.total;
   var comp = [
@@ -175,6 +177,21 @@ function breakdownHtml(map) {
   }).join('');
 }
 
+function toolsHtml(map) {
+  var keys = Object.keys(map);
+  if (!keys.length) return '<div class="empty">no data</div>';
+  var max = 0;
+  keys.forEach(function (k) { if (map[k].count > max) max = map[k].count; });
+  keys.sort(function (a, b) { return map[b].count - map[a].count; });
+  return keys.map(function (k) {
+    var b = map[k];
+    var pct = max ? (b.count / max) * 100 : 0;
+    return '<div class="brk"><div class="brk__top"><span class="brk__name">' + esc(k) + '</span>' +
+      '<span class="brk__val">' + full(b.count) + ' call' + (b.count === 1 ? '' : 's') + '</span></div>' +
+      barHtml(pct, 'is-ok') + '</div>';
+  }).join('');
+}
+
 // ---------- limits ----------
 function resetText(s, fk) {
   if (fk === 'today') {
@@ -197,17 +214,31 @@ function renderLimitBars(container, s) {
   container.innerHTML = rows.map(function (r) {
     var used = r.w.cost;
     var peakKey = r.fk === 'today' ? 'day' : r.fk;
-    var denom = r.budget != null ? r.budget : peaks[peakKey];
+    // a real ceiling learned from your last limit hit beats the all-time peak guess (5h only)
+    var capVal = r.budget != null ? r.budget : ((r.fk === 'fiveHour' && s.limitCeiling) ? s.limitCeiling : null);
+    var denom = capVal != null ? capVal : peaks[peakKey];
     var pct = denom ? Math.round(used / denom * 100) : 0;
     var rt = resetText(s, r.fk);
     var reset = rt ? '<div class="limitrow__reset">' + rt + '</div>' : '';
+    // burn rate + how long until the wall, on the limiting 5h window
+    var burn = '';
+    if (r.fk === 'fiveHour') {
+      var rate = (s.windows.hour && s.windows.hour.cost) || 0; // cost in the last hour ~ $/hour
+      if (rate > 0.01 && denom) {
+        var remaining = denom - used;
+        var label = r.budget != null ? 'your 5h budget' : (s.limitCeiling ? 'your real limit' : 'your usual 5h peak');
+        burn = remaining > 0
+          ? '<div class="limitrow__burn">burning ~' + fmtCost(rate) + '/hr · ~' + dur(remaining / rate * 3600000) + ' to ' + label + '</div>'
+          : '<div class="limitrow__burn">burning ~' + fmtCost(rate) + '/hr · past ' + label + '</div>';
+      }
+    }
     var attrs = ' data-focus="1" data-flabel="' + r.name + '" data-fcost="' + used + '" data-ftok="' + r.w.tokens + '"';
-    var right = r.budget != null
-      ? '<b>' + pct + '%</b> · ' + fmtCost(used) + ' / ' + fmtCost(r.budget)
+    var right = capVal != null
+      ? '<b>' + pct + '%</b> · ' + fmtCost(used) + ' / ' + fmtCost(capVal)
       : '<b>' + pct + '%</b> · ' + fmtCost(used);
     return '<div class="limitrow"' + attrs + '><div class="limitrow__top"><span class="limitrow__name">' + r.name + '</span>' +
       '<span class="limitrow__val">' + right + '</span></div>' +
-      barHtml(Math.min(100, pct), barClass(pct)) + reset + '</div>';
+      barHtml(Math.min(100, pct), barClass(pct)) + reset + burn + '</div>';
   }).join('');
 }
 
@@ -366,11 +397,14 @@ function showDoneOverlay(sid) {
   }).catch(function () {});
 }
 
-var VIBE_LABEL = { office: 'Office', garage: 'Garage', courchevel: 'Courchevel', paris: 'Paris' };
+var VIBE_LABEL = { office: 'Office', garage: 'Garage', courchevel: 'Courchevel', paris: 'Paris', saturn: 'Saturn', earth: 'Earth' };
 var STEAM_POS = {
   office: { left: '60%', top: '63%' }, garage: { left: '57%', top: '66%' },
   courchevel: { left: '58%', top: '70%' }, paris: { left: '60%', top: '72%' },
+  saturn: { left: '66%', top: '71%' }, earth: { left: '64%', top: '71%' },
 };
+// vibes available per mode (the office image sets)
+var MODE_VIBES = { claude: ['office', 'garage', 'courchevel', 'paris'], codex: ['saturn', 'earth'] };
 
 function buildLights() {
   if (state.lightsBuilt) return;
@@ -423,9 +457,11 @@ function renderOffice() {
   if (ns !== 'done') hideDoneOverlay();
 
   // scene image: at the desk only while actually working, standing otherwise
-  var vibe = state.vibe || 'office';
+  var mode = state.mode || 'claude';
+  var vibe = state.vibe || (mode === 'codex' ? 'saturn' : 'office');
+  if (MODE_VIBES[mode].indexOf(vibe) === -1) vibe = MODE_VIBES[mode][0]; // keep vibe valid for the mode
   var atDesk = (ns === 'working');
-  var src = 'assets/Claude' + VIBE_LABEL[vibe] + (atDesk ? 'Work' : '') + '.png';
+  var src = 'assets/' + (mode === 'codex' ? 'Codex' : 'Claude') + VIBE_LABEL[vibe] + (atDesk ? 'Work' : '') + '.png';
   var img = document.getElementById('scene-img');
   if (img.getAttribute('src') !== src) img.setAttribute('src', src);
 
@@ -652,6 +688,18 @@ function hexA(hex, a) {
 }
 
 // ---------- top-level render ----------
+function renderLimitBanner(s) {
+  var el = document.getElementById('limit-banner');
+  if (!el) return;
+  var h = s && s.limitHit;
+  if (!h || !h.resetsAt || h.resetsAt <= Date.now()) { el.hidden = true; return; }
+  el.hidden = false;
+  el.innerHTML =
+    '<span class="limit-banner__dot"></span>' +
+    '<span class="limit-banner__text">Usage limit reached</span>' +
+    '<span class="limit-banner__meta">resets at ' + esc(h.resetText) + ' · in ' + dur(h.resetsAt - Date.now()) + '</span>';
+}
+
 function render() {
   document.body.classList.toggle('office-mode', state.tab === 'office');
   var s = state.stats;
@@ -694,6 +742,8 @@ function render() {
     document.title = 'Pulse for Claude Code';
   }
 
+  renderLimitBanner(s);
+
   var tab = state.tab;
   if (tab === 'overview') renderOverview();
   else if (tab === 'office') renderOffice();
@@ -732,6 +782,68 @@ if (brandEl) {
     render();
   });
 }
+
+// ---------- connect your phone ----------
+function renderPhoneCard(s) {
+  var el = document.getElementById('ov-phone');
+  if (!el) return;
+  var topic = (s && s.ntfyTopic) || '';
+  el.hidden = false;
+  var key = topic || 'none';
+  if (el.getAttribute('data-topic') === key) return; // already rendered, don't clobber status
+  el.setAttribute('data-topic', key);
+  if (!topic) {
+    el.innerHTML =
+      '<div class="card__head"><span class="card__title">Approve from your phone</span>' +
+        '<span class="card__hint">not set up</span></div>' +
+      '<p class="note" style="margin:6px 0 12px">Get a push with Allow / Deny when Claude needs you, even away from the keyboard. One tap to start:</p>' +
+      '<div class="phone-actions"><button class="phone-gen">Generate my topic</button>' +
+        '<span class="phone-msg" id="phone-msg"></span></div>';
+    return;
+  }
+  el.innerHTML =
+    '<div class="card__head"><span class="card__title">Approve from your phone</span>' +
+      '<span class="card__hint">set up once</span></div>' +
+    '<ol class="phone-steps">' +
+      '<li>Install the free <a href="https://ntfy.sh" target="_blank" rel="noopener">ntfy</a> app on your phone.</li>' +
+      '<li>In ntfy, subscribe to this topic: <code class="phone-topic">' + esc(topic) + '</code> ' +
+        '<button class="chip chip--accent phone-copy" data-topic="' + esc(topic) + '" style="border:0;cursor:pointer">copy</button></li>' +
+      '<li>Tap <b>Send test</b>, then on the push <b>expand it</b> (pull down / long-press) to see <b>Allow</b> / <b>Deny</b>.</li>' +
+    '</ol>' +
+    '<div class="phone-actions"><button class="phone-test">Send test notification</button>' +
+      '<span class="phone-msg" id="phone-msg"></span></div>';
+}
+
+document.addEventListener('click', function (e) {
+  var pg = e.target.closest('.phone-gen');
+  if (pg) {
+    var gmsg = document.getElementById('phone-msg');
+    pg.disabled = true; if (gmsg) gmsg.textContent = 'generating…';
+    fetch('/api/gen-topic', { method: 'POST' }).then(function (r) { return r.json(); }).then(function (d) {
+      if (d && d.topic) {
+        if (state.stats) state.stats.ntfyTopic = d.topic;
+        var pel = document.getElementById('ov-phone'); if (pel) pel.setAttribute('data-topic', '');
+        renderPhoneCard(state.stats);
+      } else { pg.disabled = false; if (gmsg) gmsg.textContent = 'failed'; }
+    }).catch(function () { pg.disabled = false; if (gmsg) gmsg.textContent = 'failed'; });
+    return;
+  }
+  var cp = e.target.closest('.phone-copy');
+  if (cp) {
+    try { if (navigator.clipboard) navigator.clipboard.writeText(cp.getAttribute('data-topic') || ''); } catch (err) {}
+    cp.textContent = 'copied!'; setTimeout(function () { cp.textContent = 'copy'; }, 1500);
+    return;
+  }
+  var pt = e.target.closest('.phone-test');
+  if (pt) {
+    var msg = document.getElementById('phone-msg');
+    pt.disabled = true; if (msg) msg.textContent = 'sending…';
+    fetch('/api/test-push', { method: 'POST' }).then(function (r) { return r.json(); }).then(function (d) {
+      pt.disabled = false;
+      if (msg) msg.textContent = (d && d.ok) ? 'sent, check your phone (expand the push for the buttons)' : 'set ntfyTopic in ~/.claude-pulse.json first';
+    }).catch(function () { pt.disabled = false; if (msg) msg.textContent = 'failed'; });
+  }
+});
 
 // ---------- search across all sessions ----------
 var searchTimer;
@@ -884,6 +996,7 @@ function renderSession() {
         '<a class="chip chip--accent" style="text-decoration:none" target="_blank" rel="noopener" href="/transcript?sid=' + encodeURIComponent(state.sessionSid || '') + '">open transcript</a>' +
         '<a class="chip chip--accent" style="text-decoration:none" href="/api/export?sid=' + encodeURIComponent(state.sessionSid || '') + '&dl=1">download .md</a>' +
         '<button class="chip chip--accent resume-btn" style="border:0;cursor:pointer">copy resume cmd</button>' +
+        '<button class="chip chip--accent handoff-btn" style="border:0;cursor:pointer">copy handoff</button>' +
       '</div>' +
       '<div class="card__head" style="margin-top:18px"><span class="card__title">Usage growth per request</span>' +
         '<span class="card__hint">cumulative ' + state.chartMetric + '</span></div>' +
@@ -941,6 +1054,34 @@ document.addEventListener('click', function (e) {
   setTimeout(function () { rb.textContent = 'copy resume cmd'; }, 1500);
 });
 
+// copy a compact handoff brief to paste into a fresh session
+document.addEventListener('click', function (e) {
+  var hb = e.target.closest('.handoff-btn');
+  if (!hb) return;
+  e.stopPropagation();
+  var d = state.session;
+  if (!d) return;
+  var m = d.meta || {};
+  var turns = (d.turns || []).slice(-5);
+  var lines = [];
+  lines.push('Continue this work in a fresh session. Here is where we left off.');
+  lines.push('');
+  lines.push('Project: ' + (m.project || '?') + ' (' + (d.turns ? d.turns.length : 0) + ' turns so far)');
+  if (m.title) lines.push('Topic: ' + m.title);
+  lines.push('');
+  lines.push('Recent context:');
+  turns.forEach(function (t) {
+    if (t.prompt) lines.push('- I asked: ' + t.prompt.replace(/\s+/g, ' ').slice(0, 220));
+    if (t.text) lines.push('  Claude: ' + t.text.replace(/\s+/g, ' ').slice(0, 220));
+  });
+  lines.push('');
+  lines.push('For the full history run: claude-pulse recover ' + (state.sessionSid || ''));
+  lines.push('Pick up from here.');
+  try { if (navigator.clipboard) navigator.clipboard.writeText(lines.join('\n')); } catch (err) {}
+  hb.textContent = 'copied!';
+  setTimeout(function () { hb.textContent = 'copy handoff'; }, 1500);
+});
+
 // open a session from any linked row (but not when toggling a number)
 document.addEventListener('click', function (e) {
   if (e.target.closest('.resume-btn')) return;
@@ -964,8 +1105,41 @@ document.getElementById('plan-select').addEventListener('change', function (e) {
     .catch(function () {});
 });
 
-// office vibe selector (office | garage)
-try { state.vibe = localStorage.getItem('pulse-vibe') || 'office'; } catch (e) { state.vibe = 'office'; }
+// dashboard mode: claude (warm, original) or codex (mono, black & white),
+// chosen on a glass entry screen, switchable later by clicking the logo.
+function applyMode(m) {
+  state.mode = m;
+  document.documentElement.setAttribute('data-mode', m);
+  try { localStorage.setItem('pulse-mode', m); } catch (e) {}
+  if (MODE_VIBES[m].indexOf(state.vibe) === -1) {
+    state.vibe = MODE_VIBES[m][0];
+    try { localStorage.setItem('pulse-vibe', state.vibe); } catch (e) {}
+  }
+  setVibeButtons();
+  if (state.stats) render();
+}
+(function () {
+  var stored;
+  try { stored = localStorage.getItem('pulse-mode'); } catch (e) {}
+  state.mode = stored || 'claude';
+  document.documentElement.setAttribute('data-mode', state.mode);
+  var pick = document.getElementById('mode-pick');
+  if (pick) {
+    if (!stored) pick.hidden = false; // first visit: ask which dashboard
+    pick.addEventListener('click', function (e) {
+      var c = e.target.closest('[data-pick]');
+      if (!c) return;
+      applyMode(c.getAttribute('data-pick'));
+      pick.hidden = true;
+    });
+  }
+  var brand = document.querySelector('.brand');
+  if (brand) { brand.style.cursor = 'pointer'; brand.title = 'switch dashboard'; brand.addEventListener('click', function () { if (pick) pick.hidden = false; }); }
+})();
+
+// office vibe selector
+try { state.vibe = localStorage.getItem('pulse-vibe') || (state.mode === 'codex' ? 'saturn' : 'office'); } catch (e) { state.vibe = 'office'; }
+if (MODE_VIBES[state.mode] && MODE_VIBES[state.mode].indexOf(state.vibe) === -1) state.vibe = MODE_VIBES[state.mode][0];
 var vibeSeg = document.getElementById('vibe-seg');
 if (vibeSeg) vibeSeg.addEventListener('click', function (e) {
   var b = e.target.closest('button[data-vibe]');

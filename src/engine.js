@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { priceFor } = require('./config');
+const codex = require('./codex');
 
 const PROJECTS_DIR = path.join(os.homedir(), '.claude', 'projects');
 
@@ -147,6 +148,18 @@ function getFileData(fp) {
   return data;
 }
 
+// same, for an OpenAI Codex rollout file (cached by mtime under a codex: key)
+function getCodexFileData(fp) {
+  let st;
+  try { st = fs.statSync(fp); } catch (e) { return null; }
+  const key = 'codex:' + fp;
+  const cached = fileCache.get(key);
+  if (cached && cached.mtimeMs === st.mtimeMs && cached.size === st.size) return cached.data;
+  const data = codex.parseFile(fp);
+  fileCache.set(key, { mtimeMs: st.mtimeMs, size: st.size, data });
+  return data;
+}
+
 // ---- aggregation helpers ----
 
 function entryTokens(e) {
@@ -183,7 +196,7 @@ function addToBucket(b, e, pricing) {
   b.count++;
 }
 
-function scan(config, nowMs) {
+function scan(config, nowMs, calibrateAt) {
   const now = nowMs || Date.now();
   const pricing = config.pricing;
 
@@ -222,10 +235,26 @@ function scan(config, nowMs) {
     }
   }
 
+  // fold in OpenAI Codex CLI sessions too (set "codex": false in config to disable)
+  if (config.codex !== false) {
+    for (const fp of codex.listCodexFiles()) {
+      const d = getCodexFileData(fp);
+      if (!d) continue;
+      for (const e of d.tokens) allTokens.push(e);
+      for (const cs of Object.keys(d.sessions)) {
+        if (!sessions[cs]) sessions[cs] = Object.assign({}, d.sessions[cs]);
+      }
+    }
+  }
+
   const dayStart = startOfLocalDay(now);
   const weekStart = startOfLocalWeek(now);
   const hourStart = now - 3600 * 1000;
   const fiveHourStart = now - 5 * 3600 * 1000;
+  // optional: cost in the 5h window ending at a past limit hit, used to calibrate
+  // the real ceiling (what your usage actually was when you hit the limit).
+  const calStart = calibrateAt ? calibrateAt - 5 * 3600 * 1000 : 0;
+  const calBucket = calibrateAt ? newBucket() : null;
 
   const windows = {
     hour: newBucket(),
@@ -236,6 +265,7 @@ function scan(config, nowMs) {
   };
   const byModel = {};
   const byProject = {};
+  const bySid = {};
 
   // sparkline: last 24 hours, hourly
   const hourly = [];
@@ -264,6 +294,7 @@ function scan(config, nowMs) {
     if (e.t >= fiveHourStart) addToBucket(windows.fiveHour, e, pricing);
     if (e.t >= dayStart) addToBucket(windows.today, e, pricing);
     if (e.t >= weekStart) addToBucket(windows.week, e, pricing);
+    if (calBucket && e.t >= calStart && e.t <= calibrateAt) addToBucket(calBucket, e, pricing);
 
     const mk = modelKey(e.model);
     (byModel[mk] = byModel[mk] || newBucket());
@@ -279,6 +310,14 @@ function scan(config, nowMs) {
     }
     const dk = dateKey(e.t);
     if (daily[dk]) { daily[dk].tokens += entryTokens(e); daily[dk].cost += entryCost(e, pricing); }
+
+    // keep a running total of tokens and cost per session id.
+    // addition is done in the loop that already walks every token, so a session total costs no extra pass.
+    if (e.sid) {
+      const sb = bySid[e.sid] || (bySid[e.sid] = { tokens: 0, cost: 0 });
+      sb.tokens += entryTokens(e);
+      sb.cost += entryCost(e, pricing);
+    }
   }
 
   // per session: the latest call defines current context, the largest call ever
@@ -314,12 +353,14 @@ function scan(config, nowMs) {
   const idleMs = (config.idleMinutes || 10) * 60 * 1000;
   const sessionsOut = sessionList.slice(0, 50).map(s => {
     const cf = contextFor(s.sid);
+    const tot = bySid[s.sid] || { tokens: 0, cost: 0 };
     return {
       sid: s.sid,
       title: s.title || '(untitled session)',
       project: s.project || 'unknown',
       cwd: s.cwd,
       model: modelKey(s.model),
+      source: s.source || 'claude',
       lastPrompt: s.lastPrompt,
       firstT: s.firstT,
       lastT: s.lastT,
@@ -327,8 +368,8 @@ function scan(config, nowMs) {
       assistantMsgs: s.assistantMsgs,
       toolCalls: s.toolCalls,
       errors: s.errors,
-      tokens: sessionTokens(allTokens, s.sid),
-      cost: sessionCost(allTokens, s.sid, pricing),
+      tokens: tot.tokens,
+      cost: tot.cost,
       contextUsed: cf.used,
       contextLimit: cf.limit,
       contextPercent: cf.percent,
@@ -346,6 +387,13 @@ function scan(config, nowMs) {
       hint: t.hint,
       project: sidProject[t.sid] || 'unknown',
     }));
+
+  // count tool calls by name (Bash, Edit, Read, ...) across every session.
+  const byTool = {};
+  for (const t of allTools) {
+    if (!t.name) continue;
+    (byTool[t.name] = byTool[t.name] || { count: 0 }).count++;
+  }
 
   // rough ETA for the active session: how long past turns took vs how long the
   // current one has been running. Inherently a guess, labelled as such in the UI.
@@ -420,6 +468,7 @@ function scan(config, nowMs) {
     eta,
     resets,
     peaks,
+    calCeiling: calBucket ? calBucket.cost : null,
     budgets: config.budgets,
     context,
     active: active ? sessionsOut.find(s => s.sid === active.sid) || null : null,
@@ -427,6 +476,7 @@ function scan(config, nowMs) {
     windows,
     byModel,
     byProject,
+    byTool,
     hourly,
     daily: Object.values(daily),
     sessions: sessionsOut,
@@ -436,17 +486,6 @@ function scan(config, nowMs) {
       files: files.length,
     },
   };
-}
-
-function sessionTokens(all, sid) {
-  let n = 0;
-  for (const e of all) if (e.sid === sid) n += entryTokens(e);
-  return n;
-}
-function sessionCost(all, sid, pricing) {
-  let c = 0;
-  for (const e of all) if (e.sid === sid) c += entryCost(e, pricing);
-  return c;
 }
 
 // Effective context window for a session. Claude Code uses 200k by default and

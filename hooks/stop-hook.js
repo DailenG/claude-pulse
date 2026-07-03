@@ -13,6 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const https = require('https');
+const http = require('http');
 const { spawn } = require('child_process');
 
 const RUNTIME = path.join(os.homedir(), '.claude-pulse');
@@ -29,23 +30,27 @@ function readStdin() {
     setTimeout(function () { r(d); }, 500);
   });
 }
-function topic() {
-  try { return JSON.parse(fs.readFileSync(path.join(os.homedir(), '.claude-pulse.json'), 'utf8')).ntfyTopic || ''; }
-  catch (e) { return ''; }
+function readConfig() {
+  try { return JSON.parse(fs.readFileSync(path.join(os.homedir(), '.claude-pulse.json'), 'utf8')); }
+  catch (e) { return {}; }
 }
 function push(t, title, msg, tags) {
   if (!t) return Promise.resolve();
+  const cfg = readConfig();
+  const transport = cfg.ntfyServerHttps !== false ? https : http;
   return new Promise(function (res) {
     var data = Buffer.from(msg || '', 'utf8');
-    var req = https.request({
-      method: 'POST', hostname: 'ntfy.sh', path: '/' + encodeURIComponent(t),
-      headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
-        'Content-Length': data.length,
-        'Title': String(title || 'Claude Code').replace(/[^\x20-\x7E]/g, ''),
-        'Tags': tags || 'white_check_mark',
-        'Priority': 'default',
-      },
+    var headers = {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Content-Length': data.length,
+      'Title': String(title || 'Claude Code').replace(/[^\x20-\x7E]/g, ''),
+      'Tags': tags || 'white_check_mark',
+      'Priority': 'default',
+    };
+    if (cfg.ntfyToken) headers.Authorization = 'Bearer ' + cfg.ntfyToken;
+    var req = transport.request({
+      method: 'POST', hostname: cfg.ntfyServer || 'ntfy.sh', path: '/' + encodeURIComponent(t),
+      headers: headers,
     }, function (r) { r.on('data', function () {}); r.on('end', res); });
     req.on('error', res);
     req.write(data); req.end();
@@ -77,7 +82,7 @@ function desktopNotify(title, body, sound) {
   const project = input.cwd ? path.basename(input.cwd) : '';
   // desktop banner always; phone push only if an ntfy topic is set
   desktopNotify('Claude finished' + (project ? ' · ' + project : ''), 'Your turn', 'Glass');
-  const t = topic();
+  const t = (readConfig().ntfyTopic || '').trim();
   if (t) await push(t, 'Claude finished' + (project ? ' (' + project + ')' : ''), 'Your turn' + (project ? ' in ' + project : ''), 'white_check_mark');
   process.exit(0);
 })();
